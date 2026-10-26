@@ -1,3 +1,99 @@
+"""Paper-trading signal bot.
+
+Real prices from Kraken's public API, 10 indicators vote, signals and results go to Telegram.
+No real money, no exchange keys. State is kept in state.json (committed by the workflow).
+"""
+import json
+import os
+import time
+import urllib.request
+import urllib.error
+from datetime import datetime, timezone
+
+# ---------------- settings ----------------
+PAIR = "XBTUSD"          # Kraken pair name
+NAME = "BTC/USD"
+INTERVAL = 240           # candle size in minutes (4h)
+MIN_VOTES = 6            # votes needed in one direction
+MIN_MARGIN = 3           # and at least this many more than the opposite side
+ATR_SL = 1.5             # stop loss distance in ATRs
+ATR_TP = 2.5             # take profit distance in ATRs
+RISK = 0.02              # share of balance risked per trade
+FEE = 0.001              # 0.1% per side
+MAX_HOURS = 72           # close the trade at market after this long
+START_BALANCE = 1000.0   # virtual dollars
+DAILY_HOUR_UTC = 6       # daily status message hour
+STATE_FILE = "state.json"
+
+
+# ---------------- helpers ----------------
+def http_json(url, data=None, tries=3):
+    last = None
+    for _ in range(tries):
+        try:
+            req = urllib.request.Request(
+                url,
+                data=json.dumps(data).encode() if data is not None else None,
+                headers={
+                    "User-Agent": "paper-signal-bot",
+                    "Content-Type": "application/json",
+                },
+            )
+            with urllib.request.urlopen(req, timeout=30) as r:
+                result = json.loads(r.read().decode())
+                if isinstance(result, dict) and result.get("ok") is False:
+                    raise RuntimeError(
+                        f"Telegram API error {result.get('error_code')}: "
+                        f"{result.get('description', 'Unknown error')}"
+                    )
+                return result
+        except urllib.error.HTTPError as e:
+            body = e.read().decode("utf-8", errors="replace")
+            try:
+                details = json.loads(body)
+                description = details.get("description", body)
+                error_code = details.get("error_code", e.code)
+                last = RuntimeError(f"HTTP {error_code}: {description}")
+            except (json.JSONDecodeError, AttributeError):
+                last = RuntimeError(f"HTTP {e.code}: {body or e.reason}")
+            # HTTP errors such as 403 are generally not fixed by retrying.
+            raise last from e
+        except Exception as e:  # noqa
+            last = e
+            time.sleep(3)
+    raise last
+
+
+def fetch_candles():
+    url = f"https://api.kraken.com/0/public/OHLC?pair={PAIR}&interval={INTERVAL}"
+    j = http_json(url)
+    if j.get("error"):
+        raise RuntimeError(j["error"])
+    res = j["result"]
+    key = next(k for k in res if k != "last")
+    return [
+        {"t": int(r[0]), "o": float(r[1]), "h": float(r[2]), "l": float(r[3]),
+         "c": float(r[4]), "v": float(r[6])}
+        for r in res[key]
+    ]
+
+
+def fmt(x):
+    return f"{x:,.0f}" if abs(x) >= 100 else f"{x:,.4f}"
+
+
+def send(text):
+    token = os.environ.get("TELEGRAM_BOT_TOKEN")
+    chat = os.environ.get("TELEGRAM_CHAT_ID")
+    if not token or not chat:
+        print("[DRY RUN]\n" + text + "\n")
+        return
+    http_json(f"https://api.telegram.org/bot{token}/sendMessage", 
+              {"chat_id": chat, "text": text, "disable_web_page_preview": True}) 
+ 
+ 
+# ---------------- indicators ---------------- 
+def ema(v, n): 
     out = [None] * len(v) 
     idx = [i for i, x in enumerate(v) if x is not None] 
     if len(idx) < n: 
@@ -62,99 +158,3 @@ def votes(c):
  
     # --- trend 
     e20, e50, e200 = ema(closes, 20), ema(closes, 50), ema(closes, 200) 
-    out.append(("روند", "EMA 20/50", 1 if e20[-1] > e50[-1] else -1)) 
- 
-    e12, e26 = ema(closes, 12), ema(closes, 26) 
-    macd = [a - b if a is not None and b is not None else None for a, b in zip(e12, e26)] 
-    sig = ema(macd, 9) 
-    h_now = macd[-1] - sig[-1] 
-    h_prev = macd[-2] - sig[-2] 
-    out.append(("روند", "MACD", 1 if h_now > 0 and h_now > h_prev else -1 if h_now < 0 and h_now < h_prev else 0)) 
- 
-    out.append(("روند", "قیمت نسبت به EMA 200", 1 if last["c"] > e200[-1] else -1)) 
- 
-    # --- momentum 
-    r = rsi_last(closes) 
-    out.append(("مومنتوم", "RSI", 1 if r < 40 else -1 if r > 60 else 0)) 
-    k, d = stoch(c) 
-    out.append(("مومنتوم", "Stochastic", 1 if k < 25 and k > d else -1 if k > 75 and k < d else 0)) 
- 
-    # --- volatility 
-    w = closes[-20:] 
-    mid = sum(w) / 20 
-    sd = (sum((x - mid) ** 2 for x in w) / 20) ** 0.5 
-    lo, hi = mid - 2 * sd, mid + 2 * sd 
-    pb = 0.5 if hi == lo else (last["c"] - lo) / (hi - lo) 
-    out.append(("نوسان", "Bollinger", 1 if pb < 0.15 else -1 if pb > 0.85 else 0)) 
- 
-    atr = atr_last(c) 
-    body = last["c"] - last["o"] 
-    out.append(("نوسان", "کندل قوی (ATR)", (1 if body > 0 else -1) if abs(body) > 0.8 * atr else 0)) 
- 
-    # --- volume 
-    obv = [0.0] 
-    for i in range(1, len(c)): 
-        obv.append(obv[-1] + (c[i]["v"] if c[i]["c"] > c[i - 1]["c"] else -c[i]["v"] if c[i]["c"] < c[i - 1]["c"] else 0)) 
-    obv_e = ema(obv, 20) 
-    out.append(("حجم", "OBV", 1 if obv[-1] > obv_e[-1] else -1)) 
- 
-    w = c[-20:] 
-    vol = sum(x["v"] for x in w) 
-    vwap = sum((x["h"] + x["l"] + x["c"]) / 3 * x["v"] for x in w) / vol if vol else last["c"] 
-    out.append(("حجم", "VWAP ۲۰ کندل", 1 if last["c"] > vwap else -1)) 
- 
-    # --- support / resistance 
-    prev = c[-11:-1] 
-    out.append(("حمایت/مقاومت", "شکست ۱۰ کندل", 
-                1 if last["c"] > max(x["h"] for x in prev) else -1 if last["c"] < min(x["l"] for x in prev) else 0)) 
-    return out, atr 
- 
- 
-def decide(vs): 
-    buys = sum(1 for _, _, v in vs if v == 1) 
-    sells = sum(1 for _, _, v in vs if v == -1) 
-    if buys >= MIN_VOTES and buys - sells >= MIN_MARGIN: 
-        return "LONG", buys, sells 
-    if sells >= MIN_VOTES and sells - buys >= MIN_MARGIN: 
-        return "SHORT", buys, sells 
-    return None, buys, sells 
- 
- 
-# ---------------- state ---------------- 
-def load_state(): 
-    if os.path.exists(STATE_FILE): 
-        with open(STATE_FILE) as f: 
-            return json.load(f), False 
-    return {"balance": START_BALANCE, "open": None, "history": [], 
-            "last_candle": 0, "last_daily": ""}, True 
- 
- 
-def save_state(st): 
-    with open(STATE_FILE, "w") as f: 
-        json.dump(st, f, ensure_ascii=False, indent=1) 
- 
- 
-def stats(st): 
-    h = st["history"] 
-    wins = sum(1 for x in h if x["net"] > 0) 
-    peak, dd = START_BALANCE, 0.0 
-    for x in h: 
-        peak = max(peak, x["balance"]) 
-        dd = max(dd, (peak - x["balance"]) / peak * 100) 
-    total = (st["balance"] / START_BALANCE - 1) * 100 
-    return len(h), wins, len(h) - wins, total, dd 
- 
- 
-def stats_text(st): 
-    n, w, l, total, dd = stats(st) 
-    if n == 0: 
-        return "آمار کل: هنوز معامله‌ای بسته نشده." 
-    return (f"آمار کل (همه‌ی معاملات، با ضررها):\n" 
-            f"{n} معامله · {w} سود · {l} ضرر\n" 
-            f"بازده کل: {total:+.2f}% · بیشترین افت: -{dd:.2f}%") 
- 
- 
-# ---------------- trade logic ---------------- 
-def open_trade(st, direction, entry, atr, vs, buys, sells, ts_close): 
-    sl_d, tp_d = ATR_SL * atr, ATR_TP * atr 
-    sl = entry - sl_d if direction == "LONG" else entry + sl_d 
