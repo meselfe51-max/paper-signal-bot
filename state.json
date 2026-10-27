@@ -1,0 +1,36 @@
+{
+ "pairs": {
+  "BTC/USD": {
+   "balance": 1000.0,
+   "open": null,
+   "history": [],
+   "last_candle": 1793127600
+  },
+  "ETH/USD": {
+   "balance": 1000.0,
+   "open": null,
+   "history": [],
+   "last_candle": 1793127600
+  },
+  "SOL/USD": {
+   "balance": 1000.0,
+   "open": null,
+   "history": [],
+   "last_candle": 1793127600
+  },
+  "XRP/USD": {
+   "balance": 1000.0,
+   "open": null,
+   "history": [],
+   "last_candle": 1793127600
+  },
+  "ADA/USD": {
+   "balance": 1000.0,
+   "open": null,
+   "history": [],
+   "last_candle": 1793127600
+  }
+ },
+ "last_daily": "",
+ "failed": []
+}
