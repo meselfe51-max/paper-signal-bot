@@ -1,4 +1,4 @@
-"""Paper-trading signal bot (BTC/USD, Kraken public prices, Telegram alerts). No real money."""
+"""Paper-trading signal bot (SOL/USD, Kraken public prices, Telegram alerts). No real money."""
 import json
 import os
 import time
@@ -6,8 +6,8 @@ import urllib.request
 from datetime import datetime, timezone
 
 # ---------------- settings ----------------
-PAIR = "XBTUSD"
-NAME = "BTC/USD"
+PAIR = "SOLUSD"
+NAME = "SOL/USD"
 INTERVAL = 60            # candle size in minutes (1h)
 MIN_VOTES = 5            # votes needed in one direction
 MIN_MARGIN = 2           # and at least this many more than the other side
@@ -54,7 +54,7 @@ def fetch_candles():
 
 
 def fmt(x):
-    return f"{x:,.0f}" if abs(x) >= 100 else f"{x:,.4f}"
+    return f"{x:,.2f}" if abs(x) >= 1 else f"{x:,.4f}"
 
 
 def send(text):
