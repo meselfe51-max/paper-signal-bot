@@ -1,45 +1,79 @@
 {
- "pairs": {
+ "v": 2,
+ "balance": 1000.0,
+ "open": {
+  "ADA/USD": {
+   "dir": "SHORT",
+   "entry": 0.202606,
+   "sl": 0.20503682593235215,
+   "sl0": 0.20503682593235215,
+   "tp": 0.19774434813529576,
+   "size": 250.0,
+   "atr": 0.0016205506215680838,
+   "best": 0.202606,
+   "checked": 0,
+   "opened": 1793192400,
+   "balance_before": 1000.0
+  },
   "BTC/USD": {
-   "balance": 1000.0,
-   "open": null,
-   "history": [],
-   "last_candle": 1793185200
+   "dir": "SHORT",
+   "entry": 80620.8,
+   "sl": 81104.60435369784,
+   "sl0": 81104.60435369784,
+   "tp": 79653.19129260433,
+   "size": 250.0,
+   "atr": 322.53623579855895,
+   "best": 80620.8,
+   "checked": 0,
+   "opened": 1793192400,
+   "balance_before": 1000.0
   },
   "ETH/USD": {
-   "balance": 1000.0,
-   "open": null,
-   "history": [],
-   "last_candle": 1793185200
-  },
-  "SOL/USD": {
-   "balance": 1000.0,
-   "open": null,
-   "history": [],
-   "last_candle": 1793185200
+   "dir": "SHORT",
+   "entry": 2336.53,
+   "sl": 2356.9160635526996,
+   "sl0": 2356.9160635526996,
+   "tp": 2295.7578728946014,
+   "size": 250.0,
+   "atr": 13.59070903513297,
+   "best": 2336.53,
+   "checked": 0,
+   "opened": 1793192400,
+   "balance_before": 1000.0
   },
   "XRP/USD": {
-   "balance": 987.3328649941707,
-   "open": null,
-   "history": [
-    {
-     "dir": "LONG",
-     "entry": 1.32994,
-     "exit": 1.3157533504703474,
-     "net": -12.667135005829277,
-     "balance": 987.3328649941707,
-     "closed": 1793189600
-    }
-   ],
-   "last_candle": 1793185200
+   "dir": "SHORT",
+   "entry": 1.31483,
+   "sl": 1.3271254411199118,
+   "sl0": 1.3271254411199118,
+   "tp": 1.290239117760176,
+   "size": 250.0,
+   "atr": 0.008196960746607982,
+   "best": 1.31483,
+   "checked": 0,
+   "opened": 1793192400,
+   "balance_before": 1000.0
+  }
+ },
+ "history": [],
+ "pairs": {
+  "BTC/USD": {
+   "last_candle": 1793188800
+  },
+  "ETH/USD": {
+   "last_candle": 1793188800
+  },
+  "SOL/USD": {
+   "last_candle": 1793188800
+  },
+  "XRP/USD": {
+   "last_candle": 1793188800
   },
   "ADA/USD": {
-   "balance": 1000.0,
-   "open": null,
-   "history": [],
-   "last_candle": 1793185200
+   "last_candle": 1793188800
   }
  },
  "last_daily": "",
- "failed": []
+ "failed": [],
+ "halted": false
 }
