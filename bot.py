@@ -1,4 +1,4 @@
-"""Multi-coin paper-trading signal bot with discretionary exits (Kraken prices, Telegram alerts)."""
+"""Multi-coin paper-trading bot with ONE shared wallet (Kraken prices, Telegram alerts)."""
 import json
 import os
 import time
@@ -17,18 +17,19 @@ INTERVAL = 60            # candle size in minutes
 MIN_VOTES = 5            # votes to open a trade
 MIN_MARGIN = 2
 EXIT_VOTES = 4           # opposite votes needed to close early
-EXIT_MARGIN = 2          # and opposite must exceed own votes by this
+EXIT_MARGIN = 2
 ATR_SL = 1.5             # initial stop distance (ATRs)
 ATR_TP = 3.0             # take profit distance (ATRs)
 TRAIL_START = 1.5        # trailing starts after this much gain (ATRs)
 TRAIL_DIST = 1.0         # trailing stop distance behind best price (ATRs)
-RISK = 0.01              # share of balance risked per trade
-MAX_POS = 0.25           # max position size as share of balance
+RISK = 0.01              # share of wallet risked per trade
+MAX_POS = 0.25           # max position size as share of wallet
+MIN_TRADE = 20.0         # smallest position worth opening (dollars)
 FEE = 0.001              # per side
 SLIP = 0.001             # slippage against us on market-style exits
 MAX_HOURS = 72           # safety time stop
 HALT_DD = 0.15           # stop opening trades after this drawdown from peak
-START_BALANCE = 1000.0   # virtual dollars PER coin
+START_BALANCE = 1000.0   # ONE shared virtual wallet for all coins
 DAILY_HOUR_UTC = 6
 MIN_CANDLES = 210
 STATE_FILE = "state.json"
@@ -199,8 +200,9 @@ def decide(vs):
 
 
 # ---------------- state ----------------
-def new_pair_state():
-    return {"balance": START_BALANCE, "open": None, "history": [], "last_candle": 0, "halted": False}
+def new_state():
+    return {"v": 2, "balance": START_BALANCE, "open": {}, "history": [],
+            "pairs": {}, "last_daily": "", "failed": [], "halted": False}
 
 
 def load_state():
@@ -208,12 +210,11 @@ def load_state():
         try:
             with open(STATE_FILE) as f:
                 st = json.load(f)
-            if "pairs" in st and "last_daily" in st:
-                st.setdefault("failed", [])
+            if st.get("v") == 2:
                 return st, False
         except Exception:
             pass
-    return {"pairs": {}, "last_daily": "", "failed": []}, True
+    return new_state(), True
 
 
 def save_state(st):
@@ -221,39 +222,51 @@ def save_state(st):
         json.dump(st, f, ensure_ascii=False, indent=1)
 
 
-def peak_balance(ps):
-    return max([START_BALANCE] + [x["balance"] for x in ps["history"]])
+def free_cash(st):
+    return st["balance"] - sum(t["size"] for t in st["open"].values())
 
 
-def stats(ps):
-    h = ps["history"]
+def peak_balance(st):
+    return max([START_BALANCE] + [x["balance"] for x in st["history"]])
+
+
+def stats(h):
     wins = sum(1 for x in h if x["net"] > 0)
     peak, dd = START_BALANCE, 0.0
     for x in h:
         peak = max(peak, x["balance"])
         dd = max(dd, (peak - x["balance"]) / peak * 100)
-    total = (ps["balance"] / START_BALANCE - 1) * 100
-    return len(h), wins, len(h) - wins, total, dd
+    return len(h), wins, len(h) - wins, dd
 
 
-def stats_text(ps):
-    n, w, l, total, dd = stats(ps)
+def wallet_text(st):
+    n, w, l, dd = stats(st["history"])
+    total = (st["balance"] / START_BALANCE - 1) * 100
     if n == 0:
-        return "آمار این ارز: هنوز معامله‌ای بسته نشده."
-    return (f"آمار این ارز (همه‌ی معاملات، با ضررها):\n"
-            f"{n} معامله · {w} سود · {l} ضرر\n"
+        return (f"کیف پول: {st['balance']:.2f} دلار (آزاد: {free_cash(st):.2f})\n"
+                f"هنوز معامله‌ای بسته نشده.")
+    return (f"کیف پول: {st['balance']:.2f} دلار (آزاد: {free_cash(st):.2f})\n"
+            f"کل: {n} معامله · {w} سود · {l} ضرر\n"
             f"بازده کل: {total:+.2f}% · بیشترین افت: -{dd:.2f}%")
 
 
+def pair_text(st, name):
+    h = [x for x in st["history"] if x.get("pair") == name]
+    if not h:
+        return f"{name}: هنوز معامله‌ی بسته‌شده ندارد."
+    w = sum(1 for x in h if x["net"] > 0)
+    pnl = sum(x["net"] for x in h)
+    return f"{name}: {len(h)} معامله · {w} سود · {len(h) - w} ضرر · مجموع {pnl:+.2f} دلار"
+
+
 # ---------------- trade logic ----------------
-def open_trade(ps, name, direction, entry, atr, vs, buys, sells, ts_close):
+def open_trade(st, name, direction, entry, atr, vs, buys, sells, ts_close, size):
     sl_d, tp_d = ATR_SL * atr, ATR_TP * atr
     sl = entry - sl_d if direction == "LONG" else entry + sl_d
     tp = entry + tp_d if direction == "LONG" else entry - tp_d
-    size = min(ps["balance"] * RISK / (sl_d / entry), ps["balance"] * MAX_POS)
-    ps["open"] = {"dir": direction, "entry": entry, "sl": sl, "sl0": sl, "tp": tp, "size": size,
-                  "atr": atr, "best": entry, "checked": 0,
-                  "opened": ts_close, "balance_before": ps["balance"]}
+    st["open"][name] = {"dir": direction, "entry": entry, "sl": sl, "sl0": sl, "tp": tp,
+                        "size": size, "atr": atr, "best": entry, "checked": 0,
+                        "opened": ts_close, "balance_before": st["balance"]}
     word = "خرید (Long)" if direction == "LONG" else "فروش (Short)"
     mark = {1: "✅", -1: "❌", 0: "➖"}
     sign = 1 if direction == "LONG" else -1
@@ -267,13 +280,14 @@ def open_trade(ps, name, direction, entry, atr, vs, buys, sells, ts_close):
             f"قیمت ورود: {fmt(entry)}\n"
             f"حد سود: {fmt(tp)} ({(tp / entry - 1) * 100:+.2f}%)\n"
             f"حد ضرر: {fmt(sl)} ({(sl / entry - 1) * 100:+.2f}%)\n"
-            f"اندازه‌ی معامله: {size:.2f} دلار از {ps['balance']:.2f}\n\n"
+            f"اندازه‌ی معامله: {size:.2f} دلار از کیف پول {st['balance']:.2f} "
+            f"(آزاد بعد از این: {free_cash(st):.2f})\n\n"
             f"خروج: حد سود، حد ضرر (متحرک بعد از سود)، یا تغییر نظر روش‌ها، هر کدام زودتر.\n"
             f"این معامله مجازی است. نتیجه بعد از بسته شدن اعلام می‌شود.")
 
 
-def check_exit(ps, name, raw, closed, buys, sells, now):
-    t = ps["open"]
+def check_exit(st, name, raw, closed, buys, sells, now):
+    t = st["open"][name]
     is_long = t["dir"] == "LONG"
     t.setdefault("best", t["entry"])
     t.setdefault("sl0", t["sl"])
@@ -328,21 +342,21 @@ def check_exit(ps, name, raw, closed, buys, sells, now):
 
     move = (px / t["entry"] - 1) * (1 if is_long else -1)
     net = t["size"] * move - t["size"] * FEE * 2
-    ps["balance"] += net
+    st["balance"] += net
     hours = max(0, (now - t["opened"]) / 3600)
-    ps["history"].append({"dir": t["dir"], "entry": t["entry"], "exit": px, "net": net,
-                          "balance": ps["balance"], "closed": int(now), "why": why})
-    ps["open"] = None
+    st["history"].append({"pair": name, "dir": t["dir"], "entry": t["entry"], "exit": px,
+                          "size": t["size"], "net": net, "balance": st["balance"],
+                          "closed": int(now), "why": why})
+    del st["open"][name]
     pct = net / t["balance_before"] * 100
     win = net > 0
     return (f"{'🟢' if win else '🔴'} معامله بسته شد · {name}\n"
             f"دلیل: {why}\n"
-            f"مدت: حدود {hours:.0f} ساعت از ورود\n\n"
-            f"{'سود' if win else 'ضرر'}: {pct:+.2f}% روی سرمایه\n"
-            f"معادل {net:+.2f} دلار (بعد از کارمزد و اسلیپیج)\n"
-            f"ورود {fmt(t['entry'])} ← خروج {fmt(px)}\n"
-            f"موجودی مجازی این ارز: {ps['balance']:.2f} دلار\n\n"
-            f"{stats_text(ps)}")
+            f"مدت: حدود {hours:.0f} ساعت از ورود · اندازه {t['size']:.2f} دلار\n\n"
+            f"{'سود' if win else 'ضرر'}: {net:+.2f} دلار ({pct:+.2f}% روی کیف پول)\n"
+            f"(بعد از کارمزد و اسلیپیج)\n"
+            f"ورود {fmt(t['entry'])} ← خروج {fmt(px)}\n\n"
+            f"{wallet_text(st)}\n{pair_text(st, name)}")
 
 
 def main():
@@ -350,49 +364,25 @@ def main():
     now = time.time()
     msgs = []
     info = {}
+    data = {}
 
     if fresh:
         names = "، ".join(n for _, n in PAIRS)
-        msgs.append(f"✅ بات چندارزی روشن شد: {names}\n"
-                    f"هر ارز {START_BALANCE:.0f} دلار مجازی و معامله‌ی جدا دارد.")
+        msgs.append(f"✅ بات چندارزی با کیف پول مشترک روشن شد: {names}\n"
+                    f"کل سرمایه‌ی مجازی برای همه‌ی ارزها: {START_BALANCE:.0f} دلار.")
 
+    # 1) fetch and analyse every pair
     for pair, name in PAIRS:
         try:
             raw = fetch_candles(pair)
             closed = [c for c in raw if c["t"] + INTERVAL * 60 <= now]
             if len(closed) < MIN_CANDLES:
                 raise RuntimeError(f"فقط {len(closed)} کندل بسته موجود است")
-            ps = st["pairs"].setdefault(name, new_pair_state())
-
-            last = closed[-1]
             vs, atr = votes(closed)
             buys = sum(1 for _, _, v in vs if v == 1)
             sells = sum(1 for _, _, v in vs if v == -1)
+            data[name] = (raw, closed, vs, atr, buys, sells)
             info[name] = (raw[-1]["c"], buys, sells)
-
-            exited = False
-            if ps["open"]:
-                m = check_exit(ps, name, raw, closed, buys, sells, now)
-                if m:
-                    msgs.append(m)
-                    exited = True
-
-            if ps["last_candle"] != last["t"]:
-                ps["last_candle"] = last["t"]
-                if not ps["open"] and not exited:
-                    peak = peak_balance(ps)
-                    if ps["balance"] < peak * (1 - HALT_DD):
-                        if not ps.get("halted"):
-                            ps["halted"] = True
-                            msgs.append(f"⛔ {name}: موجودی از اوج بیش از {HALT_DD * 100:.0f}% افت کرده. "
-                                        f"معامله‌ی جدید برای این ارز باز نمی‌شود. "
-                                        f"برای ادامه HALT_DD را بالاتر ببر یا state.json را حذف کن.")
-                    else:
-                        ps["halted"] = False
-                        direction, b, s = decide(vs)
-                        if direction:
-                            msgs.append(open_trade(ps, name, direction, last["c"], atr, vs, b, s,
-                                                   last["t"] + INTERVAL * 60))
             if name in st["failed"]:
                 st["failed"].remove(name)
         except Exception as e:  # noqa
@@ -403,24 +393,68 @@ def main():
                             f"این ارز فعلاً رد می‌شود.")
         time.sleep(1)
 
+    # 2) exits first (they free up cash)
+    exited = set()
+    for name, (raw, closed, vs, atr, buys, sells) in data.items():
+        if name in st["open"]:
+            m = check_exit(st, name, raw, closed, buys, sells, now)
+            if m:
+                msgs.append(m)
+                exited.add(name)
+
+    # 3) collect new signals (once per closed candle per coin)
+    cands = []
+    for name, (raw, closed, vs, atr, buys, sells) in data.items():
+        ps = st["pairs"].setdefault(name, {"last_candle": 0})
+        last = closed[-1]
+        if ps["last_candle"] == last["t"]:
+            continue
+        ps["last_candle"] = last["t"]
+        if name in st["open"] or name in exited:
+            continue
+        direction, b, s = decide(vs)
+        if direction:
+            agree, opp = (b, s) if direction == "LONG" else (s, b)
+            cands.append((agree - opp, agree, name, direction, last["c"], atr, vs, b, s,
+                          last["t"] + INTERVAL * 60))
+
+    # 4) drawdown halt
+    halted_now = st["balance"] < peak_balance(st) * (1 - HALT_DD)
+    if halted_now and not st.get("halted"):
+        msgs.append(f"⛔ کیف پول بیش از {HALT_DD * 100:.0f}% از اوج افت کرده. "
+                    f"معامله‌ی جدید باز نمی‌شود تا خودت بررسی کنی. "
+                    f"برای ادامه HALT_DD را بالاتر ببر یا state.json را حذف کن.")
+    st["halted"] = halted_now
+
+    # 5) open new trades, strongest agreement first, limited by free cash
+    if not halted_now:
+        for score, agree, name, direction, entry, atr, vs, b, s, ts_close in sorted(
+                cands, key=lambda x: (-x[0], -x[1])):
+            size = min(st["balance"] * RISK / (ATR_SL * atr / entry),
+                       st["balance"] * MAX_POS,
+                       free_cash(st))
+            if size < MIN_TRADE:
+                msgs.append(f"⚪ سیگنال {name} ({'خرید' if direction == 'LONG' else 'فروش'}) "
+                            f"رد شد: پول آزاد کیف پول کافی نیست ({free_cash(st):.2f} دلار).")
+                continue
+            msgs.append(open_trade(st, name, direction, entry, atr, vs, b, s, ts_close, size))
+
+    # 6) daily report
     now_utc = datetime.now(timezone.utc)
     today = now_utc.strftime("%Y-%m-%d")
     if now_utc.hour == DAILY_HOUR_UTC and st["last_daily"] != today:
         st["last_daily"] = today
         lines = []
         for _, name in PAIRS:
-            ps = st["pairs"].get(name)
-            if not ps or name not in info:
+            if name not in info:
                 continue
             price, b, s = info[name]
-            n, w, l, total, dd = stats(ps)
-            o = ps["open"]
-            opn = f"{'Long' if o['dir'] == 'LONG' else 'Short'} باز" if o else "بدون معامله‌ی باز"
-            lines.append(f"{name}: {fmt(price)} · نظر روش‌ها {b} خرید/{s} فروش · {opn}\n"
-                         f"   {n} معامله ({w} سود، {l} ضرر) · بازده {total:+.2f}%")
-        if lines:
-            msgs.append("📊 گزارش روزانه\n\n" + "\n".join(lines) +
-                        "\n\nهر ارز سرمایه‌ی مجازی جدا دارد.")
+            o = st["open"].get(name)
+            opn = f"{'Long' if o['dir'] == 'LONG' else 'Short'} باز ({o['size']:.0f} دلار)" if o else "بدون معامله‌ی باز"
+            lines.append(f"{name}: {fmt(price)} · نظر روش‌ها {b} خرید/{s} فروش · {opn}")
+        per = "\n".join(pair_text(st, n) for _, n in PAIRS)
+        msgs.append("📊 گزارش روزانه\n\n" + "\n".join(lines) +
+                    f"\n\n{wallet_text(st)}\n\nسهم هر ارز:\n{per}")
 
     save_state(st)
     send_failed = False
