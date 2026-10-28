@@ -4,19 +4,19 @@
    "balance": 1000.0,
    "open": null,
    "history": [],
-   "last_candle": 1793142000
+   "last_candle": 1793160000
   },
   "ETH/USD": {
    "balance": 1000.0,
    "open": null,
    "history": [],
-   "last_candle": 1793142000
+   "last_candle": 1793160000
   },
   "SOL/USD": {
    "balance": 1000.0,
    "open": null,
    "history": [],
-   "last_candle": 1793142000
+   "last_candle": 1793160000
   },
   "XRP/USD": {
    "balance": 1000.0,
@@ -30,13 +30,13 @@
     "balance_before": 1000.0
    },
    "history": [],
-   "last_candle": 1793142000
+   "last_candle": 1793160000
   },
   "ADA/USD": {
    "balance": 1000.0,
    "open": null,
    "history": [],
-   "last_candle": 1793142000
+   "last_candle": 1793160000
   }
  },
  "last_daily": "",
