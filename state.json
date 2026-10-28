@@ -10,8 +10,8 @@
    "tp": 0.19774434813529576,
    "size": 250.0,
    "atr": 0.0016205506215680838,
-   "best": 0.202606,
-   "checked": 0,
+   "best": 0.200469,
+   "checked": 1793206800,
    "opened": 1793192400,
    "balance_before": 1000.0
   },
@@ -23,8 +23,8 @@
    "tp": 79653.19129260433,
    "size": 250.0,
    "atr": 322.53623579855895,
-   "best": 80620.8,
-   "checked": 0,
+   "best": 80281.8,
+   "checked": 1793206800,
    "opened": 1793192400,
    "balance_before": 1000.0
   },
@@ -36,8 +36,8 @@
    "tp": 2295.7578728946014,
    "size": 250.0,
    "atr": 13.59070903513297,
-   "best": 2336.53,
-   "checked": 0,
+   "best": 2319.54,
+   "checked": 1793206800,
    "opened": 1793192400,
    "balance_before": 1000.0
   },
@@ -49,8 +49,8 @@
    "tp": 1.290239117760176,
    "size": 250.0,
    "atr": 0.008196960746607982,
-   "best": 1.31483,
-   "checked": 0,
+   "best": 1.30627,
+   "checked": 1793206800,
    "opened": 1793192400,
    "balance_before": 1000.0
   }
@@ -58,19 +58,19 @@
  "history": [],
  "pairs": {
   "BTC/USD": {
-   "last_candle": 1793188800
+   "last_candle": 1793206800
   },
   "ETH/USD": {
-   "last_candle": 1793188800
+   "last_candle": 1793206800
   },
   "SOL/USD": {
-   "last_candle": 1793188800
+   "last_candle": 1793206800
   },
   "XRP/USD": {
-   "last_candle": 1793188800
+   "last_candle": 1793206800
   },
   "ADA/USD": {
-   "last_candle": 1793188800
+   "last_candle": 1793206800
   }
  },
  "last_daily": "",
