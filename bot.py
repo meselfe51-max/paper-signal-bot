@@ -1,4 +1,4 @@
-"""Multi-coin paper-trading signal bot (Kraken public prices, Telegram alerts). No real money."""
+"""Multi-coin paper-trading signal bot with discretionary exits (Kraken prices, Telegram alerts)."""
 import json
 import os
 import time
@@ -6,24 +6,31 @@ import urllib.request
 from datetime import datetime, timezone
 
 # ---------------- settings ----------------
-PAIRS = [                # (Kraken pair, display name)
+PAIRS = [
     ("XBTUSD", "BTC/USD"),
     ("ETHUSD", "ETH/USD"),
     ("SOLUSD", "SOL/USD"),
     ("XRPUSD", "XRP/USD"),
     ("ADAUSD", "ADA/USD"),
 ]
-INTERVAL = 60            # candle size in minutes (1h)
-MIN_VOTES = 5
+INTERVAL = 60            # candle size in minutes
+MIN_VOTES = 5            # votes to open a trade
 MIN_MARGIN = 2
-ATR_SL = 1.5
-ATR_TP = 2.5
-RISK = 0.02
-FEE = 0.001
-MAX_HOURS = 24
+EXIT_VOTES = 4           # opposite votes needed to close early
+EXIT_MARGIN = 2          # and opposite must exceed own votes by this
+ATR_SL = 1.5             # initial stop distance (ATRs)
+ATR_TP = 3.0             # take profit distance (ATRs)
+TRAIL_START = 1.5        # trailing starts after this much gain (ATRs)
+TRAIL_DIST = 1.0         # trailing stop distance behind best price (ATRs)
+RISK = 0.01              # share of balance risked per trade
+MAX_POS = 0.25           # max position size as share of balance
+FEE = 0.001              # per side
+SLIP = 0.001             # slippage against us on market-style exits
+MAX_HOURS = 72           # safety time stop
+HALT_DD = 0.15           # stop opening trades after this drawdown from peak
 START_BALANCE = 1000.0   # virtual dollars PER coin
 DAILY_HOUR_UTC = 6
-MIN_CANDLES = 210        # EMA 200 needs enough history
+MIN_CANDLES = 210
 STATE_FILE = "state.json"
 
 
@@ -193,7 +200,7 @@ def decide(vs):
 
 # ---------------- state ----------------
 def new_pair_state():
-    return {"balance": START_BALANCE, "open": None, "history": [], "last_candle": 0}
+    return {"balance": START_BALANCE, "open": None, "history": [], "last_candle": 0, "halted": False}
 
 
 def load_state():
@@ -212,6 +219,10 @@ def load_state():
 def save_state(st):
     with open(STATE_FILE, "w") as f:
         json.dump(st, f, ensure_ascii=False, indent=1)
+
+
+def peak_balance(ps):
+    return max([START_BALANCE] + [x["balance"] for x in ps["history"]])
 
 
 def stats(ps):
@@ -239,8 +250,9 @@ def open_trade(ps, name, direction, entry, atr, vs, buys, sells, ts_close):
     sl_d, tp_d = ATR_SL * atr, ATR_TP * atr
     sl = entry - sl_d if direction == "LONG" else entry + sl_d
     tp = entry + tp_d if direction == "LONG" else entry - tp_d
-    size = min(ps["balance"] * RISK / (sl_d / entry), ps["balance"])
-    ps["open"] = {"dir": direction, "entry": entry, "sl": sl, "tp": tp, "size": size,
+    size = min(ps["balance"] * RISK / (sl_d / entry), ps["balance"] * MAX_POS)
+    ps["open"] = {"dir": direction, "entry": entry, "sl": sl, "sl0": sl, "tp": tp, "size": size,
+                  "atr": atr, "best": entry, "checked": 0,
                   "opened": ts_close, "balance_before": ps["balance"]}
     word = "خرید (Long)" if direction == "LONG" else "فروش (Short)"
     mark = {1: "✅", -1: "❌", 0: "➖"}
@@ -255,44 +267,79 @@ def open_trade(ps, name, direction, entry, atr, vs, buys, sells, ts_close):
             f"قیمت ورود: {fmt(entry)}\n"
             f"حد سود: {fmt(tp)} ({(tp / entry - 1) * 100:+.2f}%)\n"
             f"حد ضرر: {fmt(sl)} ({(sl / entry - 1) * 100:+.2f}%)\n"
-            f"ریسک به ریوارد: 1 به {ATR_TP / ATR_SL:.1f}\n\n"
-            f"این معامله مجازی است. سود یا ضرر بعد از بسته شدن اعلام می‌شود.")
+            f"اندازه‌ی معامله: {size:.2f} دلار از {ps['balance']:.2f}\n\n"
+            f"خروج: حد سود، حد ضرر (متحرک بعد از سود)، یا تغییر نظر روش‌ها، هر کدام زودتر.\n"
+            f"این معامله مجازی است. نتیجه بعد از بسته شدن اعلام می‌شود.")
 
 
-def check_exit(ps, name, candles, now):
+def check_exit(ps, name, raw, closed, buys, sells, now):
     t = ps["open"]
-    px, why = None, None
-    for c in candles:
+    is_long = t["dir"] == "LONG"
+    t.setdefault("best", t["entry"])
+    t.setdefault("sl0", t["sl"])
+    t.setdefault("atr", abs(t["entry"] - t["sl0"]) / ATR_SL)
+    t.setdefault("checked", 0)
+    px, why, market = None, None, True
+
+    for c in raw:
         if c["t"] < t["opened"]:
             continue
-        if t["dir"] == "LONG":
-            hit_sl, hit_tp = c["l"] <= t["sl"], c["h"] >= t["tp"]
-        else:
-            hit_sl, hit_tp = c["h"] >= t["sl"], c["l"] <= t["tp"]
-        if hit_sl:
-            px, why = t["sl"], "رسیدن به حد ضرر"
+        done = c["t"] + INTERVAL * 60 <= now
+        if done and c["t"] <= t["checked"]:
+            continue
+        sl_hit = c["l"] <= t["sl"] if is_long else c["h"] >= t["sl"]
+        tp_hit = c["h"] >= t["tp"] if is_long else c["l"] <= t["tp"]
+        if sl_hit:  # if both hit in one candle, assume the worse case
+            px = t["sl"]
+            why = ("رسیدن به حد ضرر" if abs(t["sl"] - t["sl0"]) < 1e-12
+                   else "حد ضرر متحرک (بخشی از سود قفل شده بود)")
             break
-        if hit_tp:
-            px, why = t["tp"], "رسیدن به حد سود"
+        if tp_hit:
+            px, why, market = t["tp"], "رسیدن به حد سود", False
             break
+        if done:  # update trailing stop only from fully closed candles
+            if is_long:
+                t["best"] = max(t["best"], c["h"])
+                gain = t["best"] - t["entry"]
+            else:
+                t["best"] = min(t["best"], c["l"])
+                gain = t["entry"] - t["best"]
+            if gain >= TRAIL_START * t["atr"]:
+                if is_long:
+                    t["sl"] = max(t["sl"], t["best"] - TRAIL_DIST * t["atr"])
+                else:
+                    t["sl"] = min(t["sl"], t["best"] + TRAIL_DIST * t["atr"])
+            t["checked"] = c["t"]
+
+    if px is None and closed and closed[-1]["t"] >= t["opened"]:
+        own, opp = (buys, sells) if is_long else (sells, buys)
+        if opp >= EXIT_VOTES and opp - own >= EXIT_MARGIN:
+            px = closed[-1]["c"]
+            why = f"تغییر نظر روش‌ها ({opp} شاخص خلاف جهت معامله، {own} موافق)"
+
     if px is None and now - t["opened"] > MAX_HOURS * 3600:
-        px, why = candles[-1]["c"], f"گذشتن {MAX_HOURS} ساعت"
+        px, why = raw[-1]["c"], f"گذشتن {MAX_HOURS} ساعت"
+
     if px is None:
         return None
 
-    move = (px / t["entry"] - 1) * (1 if t["dir"] == "LONG" else -1)
+    if market:  # market-style exit: slippage against us
+        px = px * (1 - SLIP) if is_long else px * (1 + SLIP)
+
+    move = (px / t["entry"] - 1) * (1 if is_long else -1)
     net = t["size"] * move - t["size"] * FEE * 2
     ps["balance"] += net
-    hours = (now - t["opened"]) / 3600
+    hours = max(0, (now - t["opened"]) / 3600)
     ps["history"].append({"dir": t["dir"], "entry": t["entry"], "exit": px, "net": net,
-                          "balance": ps["balance"], "closed": int(now)})
+                          "balance": ps["balance"], "closed": int(now), "why": why})
     ps["open"] = None
     pct = net / t["balance_before"] * 100
     win = net > 0
     return (f"{'🟢' if win else '🔴'} معامله بسته شد · {name}\n"
-            f"دلیل: {why} · مدت {hours:.0f} ساعت\n\n"
+            f"دلیل: {why}\n"
+            f"مدت: حدود {hours:.0f} ساعت از ورود\n\n"
             f"{'سود' if win else 'ضرر'}: {pct:+.2f}% روی سرمایه\n"
-            f"معادل {net:+.2f} دلار (بعد از کارمزد)\n"
+            f"معادل {net:+.2f} دلار (بعد از کارمزد و اسلیپیج)\n"
             f"ورود {fmt(t['entry'])} ← خروج {fmt(px)}\n"
             f"موجودی مجازی این ارز: {ps['balance']:.2f} دلار\n\n"
             f"{stats_text(ps)}")
@@ -307,7 +354,7 @@ def main():
     if fresh:
         names = "، ".join(n for _, n in PAIRS)
         msgs.append(f"✅ بات چندارزی روشن شد: {names}\n"
-                    f"هر ارز {START_BALANCE:.0f} دلار مجازی و معامله‌ی جدا دارد. هیچ پول واقعی‌ای درگیر نیست.")
+                    f"هر ارز {START_BALANCE:.0f} دلار مجازی و معامله‌ی جدا دارد.")
 
     for pair, name in PAIRS:
         try:
@@ -317,24 +364,35 @@ def main():
                 raise RuntimeError(f"فقط {len(closed)} کندل بسته موجود است")
             ps = st["pairs"].setdefault(name, new_pair_state())
 
-            if ps["open"]:
-                m = check_exit(ps, name, raw, now)
-                if m:
-                    msgs.append(m)
-
             last = closed[-1]
             vs, atr = votes(closed)
             buys = sum(1 for _, _, v in vs if v == 1)
             sells = sum(1 for _, _, v in vs if v == -1)
             info[name] = (raw[-1]["c"], buys, sells)
 
+            exited = False
+            if ps["open"]:
+                m = check_exit(ps, name, raw, closed, buys, sells, now)
+                if m:
+                    msgs.append(m)
+                    exited = True
+
             if ps["last_candle"] != last["t"]:
                 ps["last_candle"] = last["t"]
-                if not ps["open"]:
-                    direction, b, s = decide(vs)
-                    if direction:
-                        msgs.append(open_trade(ps, name, direction, last["c"], atr, vs, b, s,
-                                               last["t"] + INTERVAL * 60))
+                if not ps["open"] and not exited:
+                    peak = peak_balance(ps)
+                    if ps["balance"] < peak * (1 - HALT_DD):
+                        if not ps.get("halted"):
+                            ps["halted"] = True
+                            msgs.append(f"⛔ {name}: موجودی از اوج بیش از {HALT_DD * 100:.0f}% افت کرده. "
+                                        f"معامله‌ی جدید برای این ارز باز نمی‌شود. "
+                                        f"برای ادامه HALT_DD را بالاتر ببر یا state.json را حذف کن.")
+                    else:
+                        ps["halted"] = False
+                        direction, b, s = decide(vs)
+                        if direction:
+                            msgs.append(open_trade(ps, name, direction, last["c"], atr, vs, b, s,
+                                                   last["t"] + INTERVAL * 60))
             if name in st["failed"]:
                 st["failed"].remove(name)
         except Exception as e:  # noqa
@@ -342,7 +400,7 @@ def main():
             if name not in st["failed"]:
                 st["failed"].append(name)
                 msgs.append(f"⚠️ مشکل در دریافت یا تحلیل {name}: {str(e)[:150]}\n"
-                            f"این ارز فعلاً رد می‌شود. اگر اسم جفت‌ارز در Kraken غلط است، از لیست PAIRS حذفش کن.")
+                            f"این ارز فعلاً رد می‌شود.")
         time.sleep(1)
 
     now_utc = datetime.now(timezone.utc)
