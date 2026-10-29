@@ -662,24 +662,27 @@ def signals_pending(st, now):
 
 def market_cycle(st, now, msgs, report_due, today):
     """Fetch data, manage open trades, look for signals, open trades, daily report."""
-    # 1) 4h candles for every pair
+    # 1) 4h candles for every pair - only when a signal check is due.
+    #    Runs that just manage open trades touch Kraken only for the 1h candles of those pairs.
+    need_signals = report_due or bool(st["failed"]) or signals_pending(st, now)
     data = {}
-    for pair, name in PAIRS:
-        try:
-            raw = fetch_candles(pair, INTERVAL)
-            closed = [c for c in raw if c["t"] + PERIOD <= now]
-            if len(closed) < MIN_CANDLES:
-                raise RuntimeError(f"فقط {len(closed)} کندل بسته موجود است")
-            data[name] = {"closed": closed, "price": raw[-1]["c"]}
-            if name in st["failed"]:
-                st["failed"].remove(name)
-        except Exception as e:  # noqa
-            print(f"[ERROR] {name}: {e}")
-            if name not in st["failed"]:
-                st["failed"].append(name)
-                msgs.append(f"⚠️ مشکل در دریافت یا تحلیل {name}: {str(e)[:150]}\n"
-                            f"این ارز فعلاً رد می‌شود.")
-        time.sleep(API_PAUSE)
+    if need_signals:
+        for pair, name in PAIRS:
+            try:
+                raw = fetch_candles(pair, INTERVAL)
+                closed = [c for c in raw if c["t"] + PERIOD <= now]
+                if len(closed) < MIN_CANDLES:
+                    raise RuntimeError(f"فقط {len(closed)} کندل بسته موجود است")
+                data[name] = {"closed": closed, "price": raw[-1]["c"]}
+                if name in st["failed"]:
+                    st["failed"].remove(name)
+            except Exception as e:  # noqa
+                print(f"[ERROR] {name}: {e}")
+                if name not in st["failed"]:
+                    st["failed"].append(name)
+                    msgs.append(f"⚠️ مشکل در دریافت یا تحلیل {name}: {str(e)[:150]}\n"
+                                f"این ارز فعلاً رد می‌شود.")
+            time.sleep(API_PAUSE)
 
     # 2) manage open trades first (exits free up cash)
     prices = {n: d["price"] for n, d in data.items()}
