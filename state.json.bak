@@ -1,0 +1,341 @@
+{
+ "v": 3,
+ "accts": {
+  "S1": {
+   "balance": 1000.0,
+   "open": {},
+   "history": [],
+   "halted": false
+  },
+  "S2": {
+   "balance": 1000.0,
+   "open": {
+    "SOL/USD": {
+     "dir": "SHORT",
+     "entry": 99.580185,
+     "sl": 102.81891263480951,
+     "sl0": 102.81891263480951,
+     "tp": null,
+     "size": 250.0,
+     "atr": 1.6193638174047507,
+     "best": 99.580185,
+     "trail": null,
+     "opened": 1793260800,
+     "tf": 240,
+     "maxs": 1728000,
+     "checked": 0,
+     "balance_before": 1000.0
+    },
+    "ADA/USD": {
+     "dir": "SHORT",
+     "entry": 0.19725932100000002,
+     "sl": 0.20600116947749164,
+     "sl0": 0.20600116947749164,
+     "tp": null,
+     "size": 225.64943959838763,
+     "atr": 0.004370924238745806,
+     "best": 0.19725932100000002,
+     "trail": null,
+     "opened": 1793260800,
+     "tf": 240,
+     "maxs": 1728000,
+     "checked": 0,
+     "balance_before": 1000.0
+    }
+   },
+   "history": [],
+   "halted": false
+  },
+  "S3": {
+   "balance": 1000.0,
+   "open": {},
+   "history": [],
+   "halted": false
+  },
+  "S4": {
+   "balance": 1000.0,
+   "open": {},
+   "history": [],
+   "halted": false
+  },
+  "S5": {
+   "balance": 1000.0,
+   "open": {},
+   "history": [],
+   "halted": false
+  },
+  "S6": {
+   "balance": 1000.0,
+   "open": {
+    "SOL/USD": {
+     "dir": "LONG",
+     "entry": 100.00997999999998,
+     "sl": 98.69775294272982,
+     "sl0": 98.69775294272982,
+     "tp": null,
+     "size": 250.0,
+     "atr": 0.8748180381801084,
+     "best": 100.00997999999998,
+     "trail": null,
+     "opened": 1793242800,
+     "tf": 60,
+     "maxs": 86400,
+     "checked": 1793257200,
+     "balance_before": 1000.0
+    }
+   },
+   "history": [],
+   "halted": false
+  },
+  "S7": {
+   "balance": 1000.0,
+   "open": {},
+   "history": [],
+   "halted": false
+  },
+  "S8": {
+   "balance": 1000.0,
+   "open": {
+    "ETH/USD": {
+     "dir": "LONG",
+     "entry": 2308.39362,
+     "sl": 2240.3333498899824,
+     "sl0": 2240.3333498899824,
+     "tp": null,
+     "size": 250.0,
+     "atr": 34.03013505500876,
+     "best": 2308.39362,
+     "trail": null,
+     "opened": 1793260800,
+     "tf": 240,
+     "maxs": 1728000,
+     "checked": 0,
+     "balance_before": 1000.0
+    }
+   },
+   "history": [],
+   "halted": false
+  },
+  "S9": {
+   "balance": 1000.0,
+   "open": {},
+   "history": [],
+   "halted": false
+  },
+  "S10": {
+   "balance": 1000.0,
+   "open": {},
+   "history": [],
+   "halted": false
+  },
+  "GROUP": {
+   "balance": 993.1030487562522,
+   "open": {
+    "BTC/USD": {
+     "dir": "SHORT",
+     "entry": 79821.6692,
+     "sl": 80475.5478344561,
+     "sl0": 80475.5478344561,
+     "tp": 78513.91193108782,
+     "size": 250.0,
+     "atr": 435.9190896373945,
+     "best": 79648.6,
+     "trail": [
+      1.5,
+      1.0
+     ],
+     "opened": 1793242800,
+     "tf": 60,
+     "maxs": 259200,
+     "checked": 1793257200,
+     "balance_before": 1000.0,
+     "votes": [
+      [
+       "EMA 20/50",
+       1
+      ],
+      [
+       "MACD",
+       -1
+      ],
+      [
+       "قیمت نسبت به EMA 200",
+       -1
+      ],
+      [
+       "RSI",
+       1
+      ],
+      [
+       "Stochastic",
+       0
+      ],
+      [
+       "Bollinger",
+       1
+      ],
+      [
+       "کندل قوی (ATR)",
+       0
+      ],
+      [
+       "OBV",
+       -1
+      ],
+      [
+       "VWAP ۲۰ کندل",
+       -1
+      ],
+      [
+       "شکست ۱۰ کندل",
+       -1
+      ]
+     ]
+    },
+    "XRP/USD": {
+     "dir": "SHORT",
+     "entry": 1.29401267,
+     "sl": 1.3098277625611705,
+     "sl0": 1.3098277625611705,
+     "tp": 1.2623824848776595,
+     "size": 250.0,
+     "atr": 0.010543395040780215,
+     "best": 1.28483,
+     "trail": [
+      1.5,
+      1.0
+     ],
+     "opened": 1793242800,
+     "tf": 60,
+     "maxs": 259200,
+     "checked": 1793257200,
+     "balance_before": 1000.0,
+     "votes": [
+      [
+       "EMA 20/50",
+       1
+      ],
+      [
+       "MACD",
+       -1
+      ],
+      [
+       "قیمت نسبت به EMA 200",
+       -1
+      ],
+      [
+       "RSI",
+       1
+      ],
+      [
+       "Stochastic",
+       0
+      ],
+      [
+       "Bollinger",
+       1
+      ],
+      [
+       "کندل قوی (ATR)",
+       0
+      ],
+      [
+       "OBV",
+       -1
+      ],
+      [
+       "VWAP ۲۰ کندل",
+       -1
+      ],
+      [
+       "شکست ۱۰ کندل",
+       -1
+      ]
+     ]
+    }
+   },
+   "history": [
+    {
+     "pair": "ADA/USD",
+     "dir": "SHORT",
+     "entry": 0.197359271,
+     "exit": 0.20122510591035447,
+     "size": 250.0,
+     "net": -6.8969512437478375,
+     "balance": 993.1030487562522,
+     "opened": 1793242800,
+     "closed": 1793261537,
+     "why": "رسیدن به حد ضرر"
+    }
+   ],
+   "halted": false
+  }
+ },
+ "last": {
+  "BTC/USD|60": 1793257200,
+  "BTC/USD|240": 1793246400,
+  "ETH/USD|60": 1793257200,
+  "ETH/USD|240": 1793246400,
+  "SOL/USD|60": 1793257200,
+  "SOL/USD|240": 1793246400,
+  "XRP/USD|60": 1793257200,
+  "XRP/USD|240": 1793246400,
+  "ADA/USD|60": 1793257200,
+  "ADA/USD|240": 1793246400
+ },
+ "acc": {
+  "EMA 20/50": {
+   "right": 0,
+   "wrong": 1,
+   "neutral": 0
+  },
+  "MACD": {
+   "right": 0,
+   "wrong": 1,
+   "neutral": 0
+  },
+  "قیمت نسبت به EMA 200": {
+   "right": 0,
+   "wrong": 1,
+   "neutral": 0
+  },
+  "RSI": {
+   "right": 1,
+   "wrong": 0,
+   "neutral": 0
+  },
+  "Stochastic": {
+   "right": 0,
+   "wrong": 0,
+   "neutral": 1
+  },
+  "Bollinger": {
+   "right": 1,
+   "wrong": 0,
+   "neutral": 0
+  },
+  "کندل قوی (ATR)": {
+   "right": 0,
+   "wrong": 0,
+   "neutral": 1
+  },
+  "OBV": {
+   "right": 0,
+   "wrong": 1,
+   "neutral": 0
+  },
+  "VWAP ۲۰ کندل": {
+   "right": 0,
+   "wrong": 1,
+   "neutral": 0
+  },
+  "شکست ۱۰ کندل": {
+   "right": 0,
+   "wrong": 1,
+   "neutral": 0
+  }
+ },
+ "last_daily": "",
+ "failed": [],
+ "tg_offset": 372224441
+}
