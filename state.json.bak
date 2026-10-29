@@ -5,7 +5,23 @@
  "peak": 1000.0,
  "open": {},
  "history": [],
- "pairs": {},
+ "pairs": {
+  "BTC/USD": {
+   "last_candle": 1793275200
+  },
+  "ETH/USD": {
+   "last_candle": 1793275200
+  },
+  "SOL/USD": {
+   "last_candle": 1793275200
+  },
+  "XRP/USD": {
+   "last_candle": 1793275200
+  },
+  "ADA/USD": {
+   "last_candle": 1793275200
+  }
+ },
  "cooldown": {},
  "last_daily": "",
  "failed": [],
@@ -13,5 +29,5 @@
  "halt_until": 0,
  "reduced_until": 0,
  "outbox": [],
- "tg_offset": 372224445
+ "tg_offset": 372224446
 }
