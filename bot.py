@@ -65,6 +65,8 @@ DAILY_HOUR_UTC = 6
 STATE_FILE = "state.json"
 BAK_FILE = STATE_FILE + ".bak"
 STATE_VERSION = 3
+STATE_KIND = "shared-wallet-long"   # identifies THIS bot's state file
+REQUIRED_KEYS = ("balance", "open", "history", "pairs")
 
 NAME2PAIR = {name: pair for pair, name in PAIRS}
 PERIOD = INTERVAL * 60
@@ -311,7 +313,7 @@ def analyze(c, d, btc_up):
 
 # ---------------- state ----------------
 def new_state():
-    return {"v": STATE_VERSION, "balance": START_BALANCE, "peak": START_BALANCE, "open": {},
+    return {"v": STATE_VERSION, "kind": STATE_KIND, "balance": START_BALANCE, "peak": START_BALANCE, "open": {},
             "history": [], "pairs": {}, "cooldown": {}, "last_daily": "", "failed": [],
             "halted": False, "halt_until": 0, "reduced_until": 0, "outbox": []}
 
@@ -321,31 +323,45 @@ def _read(path):
         return json.load(f)
 
 
+def valid_state(st):
+    return (isinstance(st, dict) and st.get("v") == STATE_VERSION and st.get("kind") == STATE_KIND
+            and all(k in st for k in REQUIRED_KEYS))
+
+
+def fill_defaults(st):
+    for k, v in new_state().items():
+        st.setdefault(k, v)
+    return st
+
+
 def load_state():
     """Returns (state, status). status: ok | fresh | restored.
 
-    Never silently resets a wallet: a corrupt state.json is restored from the backup,
-    and if that fails too the bot stops with an error instead of starting from zero.
+    Never silently deletes or resets a wallet: a state file from another bot/version is archived
+    (state_old_*.json), a corrupt one is restored from the backup, and if that fails too the bot
+    stops with an error instead of starting from zero.
     """
-    if os.path.exists(STATE_FILE):
-        try:
-            st = _read(STATE_FILE)
-            if st.get("v") == STATE_VERSION:
-                shutil.copyfile(STATE_FILE, BAK_FILE)  # backup of the last good state
-                return st, "ok"
-            os.replace(STATE_FILE, f"state_old_v{st.get('v', 'x')}.json")  # old format: archive it
-            return new_state(), "fresh"
-        except Exception as e:  # noqa
-            print(f"[STATE ERROR] {e}")
-            if os.path.exists(BAK_FILE):
-                try:
-                    st = _read(BAK_FILE)
-                    if st.get("v") == STATE_VERSION:
-                        return st, "restored"
-                except Exception as e2:  # noqa
-                    print(f"[BACKUP ERROR] {e2}")
-            raise RuntimeError("state.json is corrupt and no valid backup exists; "
-                               "fix or delete it manually (the bot will not reset the wallet by itself)")
+    if not os.path.exists(STATE_FILE):
+        return new_state(), "fresh"
+    try:
+        st = _read(STATE_FILE)
+    except Exception as e:  # noqa
+        print(f"[STATE ERROR] {e}")
+        if os.path.exists(BAK_FILE):
+            try:
+                bak = _read(BAK_FILE)
+                if valid_state(bak):
+                    return fill_defaults(bak), "restored"
+            except Exception as e2:  # noqa
+                print(f"[BACKUP ERROR] {e2}")
+        raise RuntimeError("state.json is corrupt and no valid backup exists; "
+                           "fix or delete it manually (the bot will not reset the wallet by itself)")
+    if valid_state(st):
+        shutil.copyfile(STATE_FILE, BAK_FILE)  # backup of the last good state
+        return fill_defaults(st), "ok"
+    v = st.get("v", "x") if isinstance(st, dict) else "x"
+    os.replace(STATE_FILE, f"state_old_v{v}_{int(time.time())}.json")  # old/foreign format: archive it
+    print("[STATE] state.json is not from this bot version; archived it and starting fresh")
     return new_state(), "fresh"
 
 
