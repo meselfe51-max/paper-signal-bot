@@ -1,7 +1,7 @@
-"""Multi-coin paper-trading bot v3 - long-only spot, ONE shared wallet.
+"""Multi-coin paper-trading bot v4 - long-only spot, ONE shared wallet.
 
-Kraken prices, Telegram alerts. Built to run from GitHub Actions every 30 minutes.
-Entries are evaluated once per closed 4h candle; open trades are managed on 1h candles.
+Trend following: daily regime filter + 4h Donchian breakout + ATR chandelier trailing stop.
+Kraken prices, Telegram alerts. Runs from GitHub Actions (triggered every minute).
 Pure standard library - no pip install needed.
 """
 import json
@@ -21,31 +21,24 @@ PAIRS = [
 ]
 INTERVAL = 240           # entry candle size (minutes)
 MGMT_INTERVAL = 60       # candle size used to manage open trades (minutes)
-HTF_INTERVAL = 1440      # daily candles for the big-trend filter
+HTF_INTERVAL = 1440      # daily candles for the regime filter
 WINDOW = 500             # candles fed to the indicators
 MIN_CANDLES = 210
 MIN_DAILY = 80
 
 # --- entry rules ---
-MIN_GROUPS = 3           # independent signal groups (out of 4) that must agree
-ADX_MIN = 20             # trend-strength filter (no trading in choppy ranges)
-ATR_PCT_MIN = 0.006      # ATR/price below this: costs eat the move
+DONCHIAN = 55            # breakout lookback (4h candles, about 9 days)
+RANK_DAYS = 20           # relative-strength lookback (daily candles) used to rank signals
 ATR_PCT_MAX = 0.08       # ATR/price above this: too wild
 MAX_EXT = 3.0            # do not chase: max distance above EMA20, in ATRs
-RSI_MIN = 48
-RSI_MAX = 75
-DONCHIAN = 20            # breakout lookback (candles)
 MAX_SIGNAL_AGE = 2 * 3600  # skip a signal found more than 2h after candle close
 MAX_CHASE = 0.5          # skip if price already ran this many ATRs above signal close
 
 # --- exits ---
-ATR_SL = 2.0             # initial stop distance (ATRs)
-BE_TRIGGER = 1.5         # after this gain (ATRs) stop moves to break-even (+costs)
-TRAIL_START = 2.5        # trailing starts after this gain (ATRs)
-TRAIL_DIST = 1.8         # trailing distance behind the best high (ATRs)
-ATR_TP = 6.0             # far take-profit cap (ATRs); winners are mostly trailed
-MAX_HOURS = 168          # time stop (7 days)
-COOLDOWN_H = 24          # no re-entry on a pair for this long after a loss
+ATR_SL = 3.0             # initial stop AND trailing distance behind the best high (ATRs)
+MAX_HOURS = 720          # safety time stop (30 days); winners are normally ended by the trailing stop
+COOLDOWN_H = 24          # no re-entry on a pair for this long after a real loss
+COOLDOWN_R = -0.3        # a loss counts as "real" only below this R
 
 # --- money management ---
 START_BALANCE = 1000.0   # ONE shared virtual wallet
@@ -60,13 +53,20 @@ SOFT_DD = 0.08           # risk is halved when drawdown from peak exceeds this
 HALT_DD = 0.15           # stop opening trades after this drawdown from peak
 HALT_HOURS = 72          # pause length after a halt
 REDUCED_DAYS = 7         # reduced risk after a pause ends
+HARD_DD = 0.30           # drawdown from the all-time peak: halts until you reset it by hand
+
+# --- cost filter: costs may take at most this share of the stop distance ---
+ROUND_TRIP = 2 * FEE + 2 * SLIP
+MAX_COST_SHARE = 0.25
+ATR_PCT_MIN = ROUND_TRIP / (ATR_SL * MAX_COST_SHARE)
 
 DAILY_HOUR_UTC = 6
 STATE_FILE = "state.json"
 BAK_FILE = STATE_FILE + ".bak"
 STATE_VERSION = 3
-STATE_KIND = "shared-wallet-long"   # identifies THIS bot's state file
+STATE_KIND = "shared-wallet-long"   # identifies THIS bot's state file (kept so the wallet continues)
 REQUIRED_KEYS = ("balance", "open", "history", "pairs")
+OUTBOX_MAX = 200
 
 NAME2PAIR = {name: pair for pair, name in PAIRS}
 PERIOD = INTERVAL * 60
@@ -163,24 +163,6 @@ def ema(v, n):
     return out
 
 
-def rsi_last(closes, n=14):
-    if len(closes) < n + 2:
-        return 50.0
-    gains, losses = [], []
-    for i in range(1, len(closes)):
-        d = closes[i] - closes[i - 1]
-        gains.append(max(d, 0))
-        losses.append(max(-d, 0))
-    ag = sum(gains[:n]) / n
-    al = sum(losses[:n]) / n
-    for i in range(n, len(gains)):
-        ag = (ag * (n - 1) + gains[i]) / n
-        al = (al * (n - 1) + losses[i]) / n
-    if al == 0:
-        return 100.0
-    return 100 - 100 / (1 + ag / al)
-
-
 def true_ranges(c):
     return [max(c[i]["h"] - c[i]["l"],
                 abs(c[i]["h"] - c[i - 1]["c"]),
@@ -193,40 +175,6 @@ def atr_last(c, n=14):
     for t in trs[n:]:
         a = (a * (n - 1) + t) / n
     return a
-
-
-def adx_last(c, n=14):
-    """Wilder ADX. Returns (adx, +DI, -DI) for the last candle."""
-    if len(c) < 3 * n:
-        return 0.0, 0.0, 0.0
-    trs = true_ranges(c)
-    pdm, mdm = [], []
-    for i in range(1, len(c)):
-        up = c[i]["h"] - c[i - 1]["h"]
-        dn = c[i - 1]["l"] - c[i]["l"]
-        pdm.append(up if up > dn and up > 0 else 0.0)
-        mdm.append(dn if dn > up and dn > 0 else 0.0)
-    a, p, m = sum(trs[:n]), sum(pdm[:n]), sum(mdm[:n])
-
-    def di_dx(a, p, m):
-        if a == 0:
-            return 0.0, 0.0, 0.0
-        pdi, mdi = 100 * p / a, 100 * m / a
-        s = pdi + mdi
-        return pdi, mdi, (0.0 if s == 0 else 100 * abs(pdi - mdi) / s)
-
-    pdi, mdi, dx = di_dx(a, p, m)
-    dxs = [dx]
-    for i in range(n, len(trs)):
-        a = a - a / n + trs[i]
-        p = p - p / n + pdm[i]
-        m = m - m / n + mdm[i]
-        pdi, mdi, dx = di_dx(a, p, m)
-        dxs.append(dx)
-    adx = sum(dxs[:n]) / n
-    for d in dxs[n:]:
-        adx = (adx * (n - 1) + d) / n
-    return adx, pdi, mdi
 
 
 def daily_trend_up(d):
@@ -242,80 +190,45 @@ def daily_trend_up(d):
 def analyze(c, d, btc_up):
     """c: closed 4h candles, d: closed daily candles, btc_up: True/False/None.
 
-    Long-only. A signal needs ALL filters to pass plus MIN_GROUPS of 4 independent groups
-    (trend, momentum, volume, setup). Same function is used by the bot and by backtest.py.
+    Long-only trend following. A signal needs ALL filters plus a fresh breakout:
+    the last closed 4h candle closes above the highest high of the previous DONCHIAN candles.
     """
     c = c[-WINDOW:]
     price = c[-1]["c"]
-    res = {"ok": False, "setup": "", "groups": [], "filters": [], "n": 0,
-           "adx": 0.0, "atr": 0.0, "rsi": 0.0, "price": price}
+    res = {"ok": False, "setup": "", "filters": [], "atr": 0.0, "price": price,
+           "level": 0.0, "rank": 0.0}
 
     own_up = daily_trend_up(d)
     res["filters"] = [("روند روزانه صعودی", own_up is True), ("BTC صعودی", btc_up is True)]
     if not all(ok for _, ok in res["filters"]):
-        return res  # cheap early exit (also keeps backtests fast)
+        return res  # cheap early exit
 
     closes = [x["c"] for x in c]
     atr = atr_last(c)
-    e20s, e50s, e200s = ema(closes, 20), ema(closes, 50), ema(closes, 200)
-    e20, e50, e200 = e20s[-1], e50s[-1], e200s[-1]
-    rsi, rsi_prev = rsi_last(closes), rsi_last(closes[:-1])
-    adx, pdi, mdi = adx_last(c)
-    res.update({"atr": atr, "adx": adx, "rsi": rsi})
+    e20, e200 = ema(closes, 20)[-1], ema(closes, 200)[-1]
+    level = max(x["h"] for x in c[-DONCHIAN - 1:-1])
+    res.update({"atr": atr, "level": level})
+    if len(d) > RANK_DAYS:
+        res["rank"] = d[-1]["c"] / d[-1 - RANK_DAYS]["c"] - 1
 
     res["filters"] += [
-        (f"قدرت روند (ADX {adx:.0f})", adx >= ADX_MIN and pdi > mdi),
-        ("نوسان مناسب", ATR_PCT_MIN <= atr / price <= ATR_PCT_MAX),
-        ("قیمت کشیده نشده", (price - e20) / atr <= MAX_EXT),
-        (f"RSI بیش‌خرید نیست ({rsi:.0f})", rsi < RSI_MAX),
+        ("قیمت بالای EMA200", e200 is not None and price > e200),
+        ("نوسان کافی نسبت به هزینه", ATR_PCT_MIN <= atr / price <= ATR_PCT_MAX),
+        ("قیمت کشیده نشده", e20 is not None and (price - e20) / atr <= MAX_EXT),
     ]
-
-    # group 1: trend structure
-    g_trend = bool(e20 > e50 and price > e200 and e50 > e50s[-6])
-
-    # group 2: momentum
-    e12, e26 = ema(closes, 12), ema(closes, 26)
-    macd = [a - b if a is not None and b is not None else None for a, b in zip(e12, e26)]
-    sig = ema(macd, 9)
-    h_now, h_prev = macd[-1] - sig[-1], macd[-2] - sig[-2]
-    g_mom = bool(h_now > 0 and h_now > h_prev and rsi >= RSI_MIN)
-
-    # group 3: volume / money flow
-    obv = [0.0]
-    for i in range(1, len(c)):
-        dv = c[i]["v"] if c[i]["c"] > c[i - 1]["c"] else -c[i]["v"] if c[i]["c"] < c[i - 1]["c"] else 0
-        obv.append(obv[-1] + dv)
-    obv_e = ema(obv, 20)
-    w = c[-20:]
-    vol = sum(x["v"] for x in w)
-    vwap = sum((x["h"] + x["l"] + x["c"]) / 3 * x["v"] for x in w) / vol if vol else price
-    g_vol = bool(obv[-1] > obv_e[-1] and price > vwap)
-
-    # group 4: setup (fresh breakout with volume OR pullback bounce in an uptrend)
-    prev = c[-DONCHIAN - 1:-1]
-    avg_v = sum(x["v"] for x in c[-21:-1]) / 20
-    breakout = price > max(x["h"] for x in prev) and c[-1]["v"] >= avg_v
-    pullback = (min(x["l"] for x in c[-3:]) <= e20 + 0.3 * atr and price > e20
-                and price > c[-1]["o"] and rsi > rsi_prev)
-    g_setup = bool(breakout or pullback)
-    res["setup"] = "شکست سقف با حجم" if breakout else "پولبک به EMA20" if pullback else ""
-
-    res["groups"] = [
-        ("روند", "ساختار EMA 20/50/200", g_trend),
-        ("مومنتوم", "MACD و RSI", g_mom),
-        ("حجم", "OBV و VWAP", g_vol),
-        ("ستاپ", "شکست یا پولبک", g_setup),
-    ]
-    res["n"] = sum(1 for _, _, ok in res["groups"] if ok)
-    res["ok"] = all(ok for _, ok in res["filters"]) and res["n"] >= MIN_GROUPS
+    breakout = price > level
+    if breakout:
+        res["setup"] = f"شکست سقف {DONCHIAN} کندل"
+    res["ok"] = breakout and all(ok for _, ok in res["filters"])
     return res
 
 
 # ---------------- state ----------------
 def new_state():
-    return {"v": STATE_VERSION, "kind": STATE_KIND, "balance": START_BALANCE, "peak": START_BALANCE, "open": {},
+    return {"v": STATE_VERSION, "kind": STATE_KIND, "balance": START_BALANCE, "peak": START_BALANCE,
+            "peak_all": START_BALANCE, "open": {},
             "history": [], "pairs": {}, "cooldown": {}, "last_daily": "", "failed": [],
-            "halted": False, "halt_until": 0, "reduced_until": 0, "outbox": []}
+            "halted": False, "halt_until": 0, "reduced_until": 0, "outbox": [], "btc_warn": False}
 
 
 def _read(path):
@@ -331,6 +244,8 @@ def valid_state(st):
 def fill_defaults(st):
     for k, v in new_state().items():
         st.setdefault(k, v)
+    if st.get("peak_all", 0) < st["peak"]:
+        st["peak_all"] = st["peak"]
     return st
 
 
@@ -428,12 +343,19 @@ def update_halt(st, now):
     """Drawdown guard. Returns (messages, risk_multiplier)."""
     msgs = []
     st["peak"] = max(st.get("peak", START_BALANCE), st["balance"])
+    st["peak_all"] = max(st.get("peak_all", START_BALANCE), st["balance"])
     if st.get("halted") and now >= st.get("halt_until", 0):
         st["halted"] = False
-        st["peak"] = st["balance"]  # new reference so the guard does not trigger in a loop
+        st["peak"] = st["balance"]  # new reference so the soft guard does not trigger in a loop
         st["reduced_until"] = now + REDUCED_DAYS * 86400
         msgs.append(f"▶️ توقف معامله‌ی جدید تمام شد. {REDUCED_DAYS} روز آینده با نصف ریسک ادامه می‌دهد.")
-    if not st.get("halted") and st["balance"] < st["peak"] * (1 - HALT_DD):
+    if not st.get("halted") and st["balance"] < st["peak_all"] * (1 - HARD_DD):
+        st["halted"] = True
+        st["halt_until"] = now + 10 * 365 * 86400   # effectively until you reset it by hand
+        msgs.append(f"🛑 کیف پول بیش از {HARD_DD * 100:.0f}% از اوج واقعی خود افت کرد. "
+                    f"معامله‌ی جدید تا بررسی دستی متوقف شد.\n"
+                    f"برای ادامه: در state.json مقدار halted را false و peak_all و peak را برابر balance بگذار.")
+    elif not st.get("halted") and st["balance"] < st["peak"] * (1 - HALT_DD):
         st["halted"] = True
         st["halt_until"] = now + HALT_HOURS * 3600
         msgs.append(f"⛔ کیف پول بیش از {HALT_DD * 100:.0f}% از اوج افت کرد. "
@@ -449,7 +371,6 @@ def open_position(st, name, entry, atr, ts, setup, risk_mult):
     if len(st["open"]) >= MAX_OPEN:
         return None, f"سقف {MAX_OPEN} معامله‌ی هم‌زمان پر است"
     sl = entry - ATR_SL * atr
-    tp = entry + ATR_TP * atr
     rpd = risk_per_dollar(entry, sl)
     bal = st["balance"]
     heat_room = max(0.0, bal * MAX_HEAT - open_risk(st))
@@ -457,38 +378,38 @@ def open_position(st, name, entry, atr, ts, setup, risk_mult):
     if size < MIN_TRADE:
         return None, (f"پول آزاد یا سقف ریسک کل کافی نیست "
                       f"(آزاد {free_cash(st):.2f} دلار، ریسک باز {open_risk(st):.2f} دلار)")
-    t = {"dir": "LONG", "entry": entry, "sl": sl, "sl0": sl, "tp": tp, "size": size, "atr": atr,
+    t = {"dir": "LONG", "entry": entry, "sl": sl, "sl0": sl, "tp": None, "size": size, "atr": atr,
          "best": entry, "checked": 0, "opened": ts, "balance_before": bal,
-         "risk0": size * rpd, "setup": setup}
+         "risk0": size * rpd, "setup": setup, "notified_sl": sl}
     st["open"][name] = t
     return t, ""
 
 
-def step_trade(t, hi, lo, done):
+def step_trade(t, hi, lo, done, op=None):
     """Advance a LONG by one candle. Returns (price, reason, is_market_exit) or None.
 
-    Stops are checked before targets (worst case). Trailing/break-even only move from
-    fully closed candles, so there is no look-ahead.
+    Stops are checked before targets (worst case). If the candle opens below the stop
+    (a gap), the exit fills at the open. The trailing stop (chandelier) only moves from
+    fully closed candles and only upward, so there is no look-ahead.
     """
     if lo <= t["sl"]:
+        fill = t["sl"] if (op is None or op >= t["sl"]) else op
         moved = t["sl"] > t["sl0"] + 1e-12
-        return t["sl"], ("حد ضرر متحرک (سود یا سر به سر قفل شده بود)" if moved else "رسیدن به حد ضرر"), True
-    if hi >= t["tp"]:
-        return t["tp"], "رسیدن به حد سود", False
+        return fill, ("استاپ متحرک (سود یا ضرر کمتر قفل شده بود)" if moved else "رسیدن به حد ضرر"), True
+    tp = t.get("tp")
+    if tp and hi >= tp:   # old trades opened by earlier versions may still have a target
+        return tp, "رسیدن به حد سود", False
     if done:
         t["best"] = max(t["best"], hi)
-        gain = t["best"] - t["entry"]
-        if gain >= BE_TRIGGER * t["atr"]:
-            t["sl"] = max(t["sl"], t["entry"] * (1 + 2 * (FEE + SLIP)))
-        if gain >= TRAIL_START * t["atr"]:
-            t["sl"] = max(t["sl"], t["best"] - TRAIL_DIST * t["atr"])
+        t["sl"] = max(t["sl"], t["best"] - ATR_SL * t["atr"])
     return None
 
 
 def close_trade(st, name, px, why, now):
     t = st["open"][name]
     move = px / t["entry"] - 1
-    net = t["size"] * move - t["size"] * FEE * 2
+    fees = t["size"] * FEE + t["size"] * (1 + move) * FEE   # entry fee + fee on the exit value
+    net = t["size"] * move - fees
     st["balance"] += net
     rec = {"pair": name, "dir": t["dir"], "entry": t["entry"], "exit": px, "size": t["size"],
            "net": net, "r": (net / t["risk0"]) if t["risk0"] > 0 else 0.0,
@@ -496,28 +417,24 @@ def close_trade(st, name, px, why, now):
            "pct": net / t["balance_before"] * 100}
     st["history"].append(rec)
     del st["open"][name]
-    if net < 0:
+    if rec["r"] < COOLDOWN_R:
         st["cooldown"][name] = now + COOLDOWN_H * 3600
     return rec
 
 
 # ---------------- messages ----------------
 def open_msg(st, name, t, res, risk_mult):
-    mark = {True: "✅", False: "➖"}
-    glines = "\n".join(f"{mark[ok]} {label}" for _, label, ok in res["groups"])
     half = "\n(ریسک نصف است چون کیف پول از اوج افت کرده)" if risk_mult < 1 else ""
     return (f"🟢 سیگنال خرید (Long) · {name}\n"
-            f"تایم‌فریم {INTERVAL // 60} ساعته · الگو: {res['setup']}\n\n"
-            f"اجماع: {res['n']} از ۴ گروه مستقل\n{glines}\n"
-            f"فیلترها (همه قبول): روند روزانه، BTC، ADX {res['adx']:.0f}، نوسان، RSI {res['rsi']:.0f}\n\n"
+            f"تایم‌فریم {INTERVAL // 60} ساعته · الگو: {res['setup']}\n"
+            f"فیلترها (همه قبول): روند روزانه‌ی ارز و BTC، بالای EMA200، نوسان کافی، قیمت کشیده نشده\n\n"
             f"قیمت ورود: {fmt(t['entry'])}\n"
-            f"حد ضرر: {fmt(t['sl'])} ({(t['sl'] / t['entry'] - 1) * 100:+.2f}%)\n"
-            f"حد سود: {fmt(t['tp'])} ({(t['tp'] / t['entry'] - 1) * 100:+.2f}%)\n"
+            f"حد ضرر اولیه: {fmt(t['sl'])} ({(t['sl'] / t['entry'] - 1) * 100:+.2f}%)\n"
+            f"حد سود: ندارد؛ خروج با استاپ متحرک ({ATR_SL:g} ATR پشت بالاترین قیمت)\n"
             f"اندازه: {t['size']:.2f} دلار · ریسک: {t['risk0']:.2f} دلار "
             f"({t['risk0'] / st['balance'] * 100:.2f}% کیف پول){half}\n"
             f"باز: {len(st['open'])} از {MAX_OPEN} · آزاد بعد از این: {free_cash(st):.2f}\n\n"
-            f"مدیریت: بعد از {BE_TRIGGER:g} ATR سود استاپ می‌رود روی سر به سر؛ "
-            f"بعد از {TRAIL_START:g} ATR تریلینگ شروع می‌شود. هر جابه‌جایی استاپ اینجا اعلام می‌شود.\n"
+            f"بالا رفتن قابل‌توجه استاپ اینجا اعلام می‌شود.\n"
             f"این معامله مجازی است. نتیجه بعد از بسته شدن اعلام می‌شود.")
 
 
@@ -544,18 +461,17 @@ def trail_msg(name, t, old_sl, price):
 
 def status_text(res):
     if res["ok"]:
-        return f"سیگنال فعال ({res['n']}/4)"
+        return "سیگنال فعال (شکست سقف)"
     failed = [label for label, ok in res["filters"] if not ok]
     if failed:
         return "بدون سیگنال · رد شده در: " + "، ".join(failed[:2])
-    return f"بدون سیگنال ({res['n']}/4 گروه)"
+    return f"منتظر شکست سقف ({fmt(res['level'])})"
 
 
 # ---------------- live management of an open trade ----------------
 def manage_live(st, name, raw_m, now):
     """Returns ("exit"|"trail", text) or None."""
     t = st["open"][name]
-    old_sl = t["sl"]
     bucket = int(t["opened"] // MGMT_SEC) * MGMT_SEC  # 1h candle that contains the entry
     hit = None
     for c in raw_m:
@@ -565,10 +481,10 @@ def manage_live(st, name, raw_m, now):
         if done and c["t"] <= t["checked"]:
             continue
         if c["t"] == bucket:
-            hi = lo = c["c"]  # price moves before our entry must not count
+            hi = lo = op = c["c"]  # price moves before our entry must not count
         else:
-            hi, lo = c["h"], c["l"]
-        hit = step_trade(t, hi, lo, done)
+            hi, lo, op = c["h"], c["l"], c["o"]
+        hit = step_trade(t, hi, lo, done, op)
         if hit:
             break
         if done:
@@ -581,8 +497,10 @@ def manage_live(st, name, raw_m, now):
             px *= 1 - SLIP
         rec = close_trade(st, name, px, why, now)
         return "exit", close_msg(st, name, rec)
-    if t["sl"] > old_sl + 1e-12:
-        return "trail", trail_msg(name, t, old_sl, raw_m[-1]["c"])
+    notified = t.get("notified_sl", t["sl0"])
+    if t["sl"] >= notified + 0.5 * t["atr"]:   # tell me only about meaningful stop moves
+        t["notified_sl"] = t["sl"]
+        return "trail", trail_msg(name, t, notified, raw_m[-1]["c"])
     return None
 
 
@@ -591,7 +509,7 @@ HELP_TEXT = ("دستورها:\n"
              "/status معاملات باز با قیمت لحظه‌ای\n"
              "/stats وضعیت کیف پول و آمار هر ارز\n"
              "/help همین راهنما\n\n"
-             "جواب‌ها با اجرای بعدی بات می‌آیند (معمولاً چند دقیقه). همه‌ی معاملات مجازی‌اند.")
+             "جواب‌ها با اجرای بعدی بات می‌آیند (معمولاً ۱ تا ۲ دقیقه). همه‌ی معاملات مجازی‌اند.")
 
 
 def status_reply(st, prices, now):
@@ -600,7 +518,8 @@ def status_reply(st, prices, now):
     lines = []
     for name, t in st["open"].items():
         hours = max(0, (now - t["opened"]) / 3600)
-        line = (f"{name} Long از {fmt(t['entry'])} · استاپ {fmt(t['sl'])} · حد سود {fmt(t['tp'])} · "
+        tp_txt = fmt(t["tp"]) if t.get("tp") else "ندارد (استاپ متحرک)"
+        line = (f"{name} Long از {fmt(t['entry'])} · استاپ {fmt(t['sl'])} · حد سود {tp_txt} · "
                 f"{t['size']:.0f} دلار · {hours:.0f} ساعت پیش")
         px = prices.get(name)
         if px:
@@ -663,7 +582,6 @@ def signals_pending(st, now):
 def market_cycle(st, now, msgs, report_due, today):
     """Fetch data, manage open trades, look for signals, open trades, daily report."""
     # 1) 4h candles for every pair - only when a signal check is due.
-    #    Runs that just manage open trades touch Kraken only for the 1h candles of those pairs.
     need_signals = report_due or bool(st["failed"]) or signals_pending(st, now)
     data = {}
     if need_signals:
@@ -691,7 +609,7 @@ def market_cycle(st, now, msgs, report_due, today):
         try:
             raw_m = fetch_candles(NAME2PAIR[name], MGMT_INTERVAL)
         except Exception as e:  # noqa
-            print(f"[ERROR] manage {name}: {e}")  # candles keep their highs/lows: retried next run
+            print(f"[ERROR] manage {name}: {e}")  # retried next run
             continue
         time.sleep(API_PAUSE)
         prices[name] = raw_m[-1]["c"]
@@ -717,9 +635,14 @@ def market_cycle(st, now, msgs, report_due, today):
         if "v" not in btc_cache:
             try:
                 btc_cache["v"] = daily_trend_up(get_daily(NAME2PAIR["BTC/USD"]))
+                st["btc_warn"] = False
             except Exception as e:  # noqa
                 print(f"[ERROR] BTC daily: {e}")
                 btc_cache["v"] = None
+                if not st.get("btc_warn"):   # tell me once, not every run
+                    st["btc_warn"] = True
+                    msgs.append(f"⚠️ دریافت کندل روزانه‌ی BTC شکست خورد: {str(e)[:120]}\n"
+                                f"تا رفع مشکل، سیگنال جدیدی بررسی نمی‌شود.")
         return btc_cache["v"]
 
     cands, analyses, gaps = [], {}, []
@@ -760,7 +683,7 @@ def market_cycle(st, now, msgs, report_due, today):
             msgs.append(f"⚪ سیگنال خرید {name} رد شد: قیمت از نقطه‌ی سیگنال ({fmt(last['c'])}) "
                         f"بیش از {MAX_CHASE:g} ATR بالاتر رفته ({fmt(data[name]['price'])}).")
             continue
-        cands.append((res["n"], res["adx"], name, res))
+        cands.append((res["rank"], name, res))
 
     if gaps:
         msgs.append(f"⚠️ این تعداد کندل {INTERVAL // 60} ساعته بررسی نشده بود "
@@ -770,8 +693,8 @@ def market_cycle(st, now, msgs, report_due, today):
     hm, risk_mult = update_halt(st, now)
     msgs += hm
 
-    # 5) open new trades: strongest first, limited by cash, count and total risk
-    for _, _, name, res in sorted(cands, key=lambda x: (-x[0], -x[1])):
+    # 5) open new trades: strongest recent momentum first, limited by cash, count and total risk
+    for _, name, res in sorted(cands, key=lambda x: -x[0]):
         if st["halted"]:
             msgs.append(f"⚪ سیگنال خرید {name} رد شد: معامله‌ی جدید به خاطر افت کیف پول متوقف است.")
             continue
@@ -815,7 +738,7 @@ def main():
     msgs = []
     if status == "fresh":
         names = "، ".join(n for _, n in PAIRS)
-        msgs.append(f"✅ بات نسخه‌ی ۳ روشن شد (فقط خرید/اسپات، کیف پول مشترک): {names}\n"
+        msgs.append(f"✅ بات نسخه‌ی ۴ روشن شد (روندیابی، فقط خرید/اسپات، کیف پول مشترک): {names}\n"
                     f"سرمایه‌ی مجازی: {START_BALANCE:.0f} دلار · کندل {INTERVAL // 60} ساعته\n"
                     f"ریسک هر معامله {RISK * 100:.2f}% · حداکثر {MAX_OPEN} معامله‌ی هم‌زمان.\n"
                     f"برای راهنما /help را بفرست.")
@@ -827,7 +750,7 @@ def main():
     today = now_utc.strftime("%Y-%m-%d")
     report_due = now_utc.hour == DAILY_HOUR_UTC and st["last_daily"] != today
 
-    # Fast path: most 5-minute runs have nothing to do and finish in a few seconds.
+    # Fast path: most runs have nothing to do and finish in a few seconds.
     prices = {}
     if st["open"] or report_due or st["failed"] or signals_pending(st, now):
         prices = market_cycle(st, now, msgs, report_due, today)
@@ -839,7 +762,7 @@ def main():
 
     # Save first, then send (undelivered messages stay queued in the state file)
     st["outbox"].extend(msgs)
-    st["outbox"] = st["outbox"][-40:]
+    st["outbox"] = st["outbox"][-OUTBOX_MAX:]
     save_state(st)
     ok = flush_outbox(st)
     save_state(st)
