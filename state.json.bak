@@ -7,19 +7,19 @@
  "history": [],
  "pairs": {
   "BTC/USD": {
-   "last_candle": 1793289600
+   "last_candle": 1793304000
   },
   "ETH/USD": {
-   "last_candle": 1793289600
+   "last_candle": 1793304000
   },
   "SOL/USD": {
-   "last_candle": 1793289600
+   "last_candle": 1793304000
   },
   "XRP/USD": {
-   "last_candle": 1793289600
+   "last_candle": 1793304000
   },
   "ADA/USD": {
-   "last_candle": 1793289600
+   "last_candle": 1793304000
   }
  },
  "cooldown": {},
