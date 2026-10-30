@@ -1,22 +1,25 @@
 """Backtest for bot.py - uses the SAME functions as the live bot (no second copy of the logic).
 
 Usage
-  python backtest.py --csv-dir data     # Kraken 4h files: XBTUSD_240.csv, ETHUSD_240.csv, ...
-  python backtest.py --live             # last ~720 4h candles from the Kraken API (short, only a smoke test)
+  python backtest.py --csv-dir data              # Kraken 4h files: XBTUSD_240.csv, ETHUSD_240.csv, ...
+  python backtest.py --csv-dir data --sweep      # parameter-sensitivity table (new bot only)
+  python backtest.py --csv-dir data --module bot_old   # run an older bot file for comparison
+  python backtest.py --live                      # last ~720 4h candles from Kraken (smoke test only)
 
 CSV format (Kraken OHLCVT download): timestamp, open, high, low, close, volume, trades
 Realism: signal at candle close -> entry at the NEXT candle open (+slippage); fees and slippage
-from bot.py; shared wallet, position cap, total-risk cap, cooldown and drawdown guard all active.
+from the bot module; shared wallet, position cap, total-risk cap, cooldown and drawdown guard active.
+Trades are managed on 4h candles here (live uses 1h), so stops react slightly slower than live.
 """
 import argparse
 import csv
+import importlib
 import os
 import sys
 import time
 from bisect import bisect_right
 
-import bot
-
+bot = None   # set in main() so --module can choose which bot file is tested
 BTC = "BTC/USD"
 
 
@@ -95,7 +98,7 @@ def _simulate(data):
         _, risk_mult = bot.update_halt(st, ts)
 
         # 1) entries decided at the previous close are filled at this candle's open
-        for _, _, n, atr, setup in sorted(pending, key=lambda x: (-x[0], -x[1])):
+        for _, n, atr, setup in sorted(pending, key=lambda x: -x[0]):
             if n not in cur or n in st["open"] or st["halted"]:
                 continue
             bot.open_position(st, n, cur[n][1]["o"] * (1 + bot.SLIP), atr, ts, setup, risk_mult)
@@ -106,7 +109,7 @@ def _simulate(data):
             if n not in cur:
                 continue
             c, t = cur[n][1], st["open"][n]
-            hit = bot.step_trade(t, c["h"], c["l"], True)
+            hit = bot.step_trade(t, c["h"], c["l"], True, c["o"])
             if hit is None and now_close - t["opened"] > bot.MAX_HOURS * 3600:
                 hit = (c["c"], "time", True)
             if hit:
@@ -127,11 +130,20 @@ def _simulate(data):
             k = bisect_right(dends[n], now_close)
             res = bot.analyze(data[n][max(0, i + 1 - bot.WINDOW):i + 1], daily[n][max(0, k - 200):k], btc_up)
             if res["ok"]:
-                pending.append((res["n"], res["adx"], n, res["atr"], res["setup"]))
+                # new bot ranks by "rank"; the old bot had "n" (group count)
+                pending.append((res.get("rank", res.get("n", 0)), n, res["atr"], res["setup"]))
 
         eq = st["balance"] + sum(t["size"] * (last_close[n] / t["entry"] - 1) for n, t in st["open"].items())
         equity.append((ts, eq))
     return st, equity, ts_all
+
+
+def max_dd(equity):
+    peak, mdd = equity[0][1], 0.0
+    for _, e in equity:
+        peak = max(peak, e)
+        mdd = max(mdd, (peak - e) / peak * 100)
+    return mdd
 
 
 def block(label, h, extra=""):
@@ -144,10 +156,7 @@ def block(label, h, extra=""):
 
 def summary(title, st, equity, ts_all, data):
     h = st["history"]
-    peak, mdd = equity[0][1], 0.0
-    for _, e in equity:
-        peak = max(peak, e)
-        mdd = max(mdd, (peak - e) / peak * 100)
+    mdd = max_dd(equity)
     ret = (equity[-1][1] / bot.START_BALANCE - 1) * 100
     days = (ts_all[-1] - ts_all[0]) / 86400
     print(f"\n=== {title} ({days:.0f} days) ===")
@@ -171,16 +180,58 @@ def buy_and_hold(data):
     return sum(rets) / len(rets)
 
 
+def pf_txt(h):
+    if not h:
+        return "  n/a"
+    pf = bot.stats(h)[4]
+    return "  inf" if pf == float("inf") else f"{pf:5.2f}"
+
+
+def sweep(data):
+    """Parameter-sensitivity table. Trust the setup only if results are similar across neighbours."""
+    if not hasattr(bot, "DONCHIAN"):
+        sys.exit("--sweep works only with the new trend-following bot.py")
+    old = (bot.DONCHIAN, bot.ATR_SL, bot.ATR_PCT_MIN)
+    print("\n=== PARAMETER SENSITIVITY (base fees) ===")
+    print("  want a plateau: similar, positive results in neighbouring cells, not one lucky cell\n")
+    try:
+        for don in (40, 55, 80):
+            for sl in (2.5, 3.0, 3.5):
+                bot.DONCHIAN, bot.ATR_SL = don, sl
+                bot.ATR_PCT_MIN = bot.ROUND_TRIP / (sl * bot.MAX_COST_SHARE)
+                st, eq, ts_all = simulate(data)
+                h = st["history"]
+                n, w, _, _, _, avg_r = bot.stats(h)
+                wr = (w / n * 100) if n else 0
+                ret = (eq[-1][1] / bot.START_BALANCE - 1) * 100
+                cut = ts_all[0] + 0.6 * (ts_all[-1] - ts_all[0])
+                oos = [x for x in h if x["closed"] > cut]
+                print(f"  DON {don:>3} SL {sl:.1f} | trades {n:>4} | win {wr:4.1f}% | PF{pf_txt(h)} | "
+                      f"avg {avg_r:+.2f}R | ret {ret:+7.1f}% | DD -{max_dd(eq):4.1f}% | OOS PF{pf_txt(oos)}")
+    finally:
+        bot.DONCHIAN, bot.ATR_SL, bot.ATR_PCT_MIN = old
+
+
 def main():
+    global bot
     ap = argparse.ArgumentParser()
     ap.add_argument("--csv-dir", default="data")
     ap.add_argument("--live", action="store_true")
+    ap.add_argument("--module", default="bot", help="bot file to test (default: bot)")
+    ap.add_argument("--sweep", action="store_true")
     args = ap.parse_args()
+    bot = importlib.import_module(args.module)
+
     data = load_data(args)
+    print("module:", args.module)
     print("pairs:", ", ".join(data), "| candles each:", ", ".join(str(len(v)) for v in data.values()))
 
     t0 = time.time()
-    base = summary("BASE (fees from bot.py)", *simulate(data), data)
+    if args.sweep:
+        sweep(data)
+        print(f"\n  (run took {time.time() - t0:.0f}s)")
+        return
+    summary("BASE (fees from bot file)", *simulate(data), data)
     summary("STRESS (fees and slippage x2)", *simulate(data, 2.0), data)
     print(f"\n  buy & hold, equal weight, same period: {buy_and_hold(data):+.1f}%  (run took {time.time() - t0:.0f}s)")
 
@@ -190,7 +241,6 @@ How to read this (honest rules of thumb)
   - Want: PF > 1.3 in BOTH the in-sample and the out-of-sample block, avg R > +0.15,
     and STRESS still positive. If only the first block is good, that is overfitting.
   - Do not tune the settings in bot.py until the backtest looks great: that only fits the past.""")
-    return base
 
 
 if __name__ == "__main__":
