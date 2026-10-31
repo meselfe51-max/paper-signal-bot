@@ -18,7 +18,14 @@ PAIRS = [
     ("SOLUSD", "SOL/USD"),
     ("XRPUSD", "XRP/USD"),
     ("ADAUSD", "ADA/USD"),
+    ("LINKUSD", "LINK/USD"),
+    ("AVAXUSD", "AVAX/USD"),
+    ("LTCUSD", "LTC/USD"),
+    ("DOTUSD", "DOT/USD"),
+    ("ATOMUSD", "ATOM/USD"),
+    ("PAXGUSD", "PAXG/USD"),   # gold token
 ]
+NO_BTC_FILTER = {"PAXG/USD"}   # gold does not follow the crypto regime (set() to disable)
 INTERVAL = 240           # entry candle size (minutes)
 MGMT_INTERVAL = 60       # candle size used to manage open trades (minutes)
 HTF_INTERVAL = 1440      # daily candles for the regime filter
@@ -187,11 +194,12 @@ def daily_trend_up(d):
 
 
 # ---------------- signal ----------------
-def analyze(c, d, btc_up):
+def analyze(c, d, btc_up, name=""):
     """c: closed 4h candles, d: closed daily candles, btc_up: True/False/None.
 
     Long-only trend following. A signal needs ALL filters plus a fresh breakout:
     the last closed 4h candle closes above the highest high of the previous DONCHIAN candles.
+    Pairs in NO_BTC_FILTER skip the BTC regime filter.
     """
     c = c[-WINDOW:]
     price = c[-1]["c"]
@@ -199,7 +207,9 @@ def analyze(c, d, btc_up):
            "level": 0.0, "rank": 0.0}
 
     own_up = daily_trend_up(d)
-    res["filters"] = [("روند روزانه صعودی", own_up is True), ("BTC صعودی", btc_up is True)]
+    res["filters"] = [("روند روزانه صعودی", own_up is True)]
+    if name not in NO_BTC_FILTER:
+        res["filters"].append(("BTC صعودی", btc_up is True))
     if not all(ok for _, ok in res["filters"]):
         return res  # cheap early exit
 
@@ -427,7 +437,7 @@ def open_msg(st, name, t, res, risk_mult):
     half = "\n(ریسک نصف است چون کیف پول از اوج افت کرده)" if risk_mult < 1 else ""
     return (f"🟢 سیگنال خرید (Long) · {name}\n"
             f"تایم‌فریم {INTERVAL // 60} ساعته · الگو: {res['setup']}\n"
-            f"فیلترها (همه قبول): روند روزانه‌ی ارز و BTC، بالای EMA200، نوسان کافی، قیمت کشیده نشده\n\n"
+            f"فیلترها (همه قبول): {'، '.join(label for label, _ in res['filters'])}\n\n"
             f"قیمت ورود: {fmt(t['entry'])}\n"
             f"حد ضرر اولیه: {fmt(t['sl'])} ({(t['sl'] / t['entry'] - 1) * 100:+.2f}%)\n"
             f"حد سود: ندارد؛ خروج با استاپ متحرک ({ATR_SL:g} ATR پشت بالاترین قیمت)\n"
@@ -656,10 +666,13 @@ def market_cycle(st, now, msgs, report_due, today):
         if not new_candle and not report_due:
             continue
         try:
-            b = btc_up()
-            if b is None:
-                raise RuntimeError("وضعیت BTC نامشخص است")
-            res = analyze(closed, get_daily(pair), b)
+            if name in NO_BTC_FILTER:
+                b = True   # BTC filter is not applied to this pair
+            else:
+                b = btc_up()
+                if b is None:
+                    raise RuntimeError("وضعیت BTC نامشخص است")
+            res = analyze(closed, get_daily(pair), b, name)
         except Exception as e:  # noqa
             print(f"[ERROR] analyze {name}: {e}")  # candle not marked as seen: retried next run
             continue
