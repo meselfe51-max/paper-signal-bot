@@ -5,6 +5,7 @@ Kraken prices, Telegram alerts. Runs from GitHub Actions (triggered every minute
 Pure standard library - no pip install needed.
 """
 import json
+import math
 import os
 import shutil
 import time
@@ -514,10 +515,163 @@ def manage_live(st, name, raw_m, now):
     return None
 
 
+# ---------------- /plan report: why no entry, what must happen, where the exit is ----------------
+def daily_sigma(d, n=30):
+    """Std-dev of daily returns over the last n days (None if there is too little data)."""
+    cl = [x["c"] for x in d[-(n + 1):]]
+    if len(cl) < 10:
+        return None
+    r = [cl[i] / cl[i - 1] - 1 for i in range(1, len(cl))]
+    m = sum(r) / len(r)
+    return math.sqrt(sum((x - m) ** 2 for x in r) / (len(r) - 1))
+
+
+def daily_detail(d):
+    """Same test as daily_trend_up, but returns the numbers: (ok, close, ema50, slope_5d)."""
+    if len(d) < MIN_DAILY:
+        return None
+    closes = [x["c"] for x in d[-200:]]
+    e = ema(closes, 50)
+    return (bool(closes[-1] > e[-1] and e[-1] > e[-6]), closes[-1], e[-1], e[-1] / e[-6] - 1)
+
+
+def plan_pair(name, c4, d, live, btc_d, btc_sg, btc_live):
+    """Lines for a coin WITHOUT an open trade. Mirrors analyze() but never stops at the first failure."""
+    c = c4[-WINDOW:]
+    closes = [x["c"] for x in c]
+    last = closes[-1]
+    atr = atr_last(c)
+    e20, e200 = ema(closes, 20)[-1], ema(closes, 200)[-1]
+    level = max(x["h"] for x in c[-DONCHIAN - 1:-1])
+    sg = daily_sigma(d)
+    # (ok, text, share of price still needed upward or None, daily volatility used for the time estimate)
+    checks = []
+
+    dd = daily_detail(d)
+    if dd is None:
+        checks.append((False, "روند روزانه: داده‌ی کافی نیست", None, None))
+    else:
+        ok, close, e50, slope = dd
+        need = (e50 / live - 1) if (not ok and e50 > live) else None
+        checks.append((ok, f"روند روزانه: بسته {fmt(close)} | EMA50 {fmt(e50)} | شیب ۵روزه {slope * 100:+.1f}%",
+                       need, sg))
+
+    if name in NO_BTC_FILTER:
+        checks.append((True, "دروازه BTC: اعمال نمی‌شود", None, None))
+    elif name != "BTC/USD":
+        if btc_d is None:
+            checks.append((False, "دروازه BTC: داده‌ی کافی نیست", None, None))
+        else:
+            ok, close, e50, slope = btc_d
+            ref = btc_live or close
+            need = (e50 / ref - 1) if (not ok and e50 > ref) else None
+            checks.append((ok, f"دروازه BTC: بسته {fmt(close)} | EMA50 {fmt(e50)} | شیب ۵روزه {slope * 100:+.1f}%",
+                           need, btc_sg))
+
+    checks.append((last > e200, f"EMA200 ۴ساعته: بسته {fmt(last)} | EMA200 {fmt(e200)}",
+                   (e200 / live - 1) if (last <= e200 and e200 > live) else None, sg))
+
+    ap = atr / last
+    checks.append((ATR_PCT_MIN <= ap <= ATR_PCT_MAX,
+                   f"نوسان: ATR {ap * 100:.2f}% | مجاز {ATR_PCT_MIN * 100:.2f}% تا {ATR_PCT_MAX * 100:.0f}%",
+                   None, None))
+
+    ext = (last - e20) / atr
+    checks.append((ext <= MAX_EXT, f"کشیدگی: {ext:.1f} ATR بالای EMA20 | حداکثر {MAX_EXT:g}", None, None))
+
+    wait = "؛ باید کندل ۴ساعته بالای سقف ببندد" if last <= level < live else ""
+    checks.append((last > level, f"شکست: سقف {DONCHIAN} کندل {fmt(level)} | بسته ۴ساعته {fmt(last)}{wait}",
+                   (level / live - 1) if (last <= level and level > live) else None, sg))
+
+    lines = [f"{name} · قیمت {fmt(live)}"]
+    bad = [x for x in checks if not x[0]]
+    if not bad:
+        lines.append("✅ همه‌ی شرط‌ها برقرار است؛ سیگنال در بررسی کندل بعدی ثبت می‌شود.")
+        return lines
+    for ok, text, need, _ in bad:
+        extra = f" ← {need * 100:.1f}% بالاتر لازم است" if need else ""
+        lines.append(f"❌ {text}{extra}")
+    lines.append(f"✅ {len(checks) - len(bad)} شرط دیگر برقرار است")
+    ests = [(need / s) ** 2 for _, _, need, s in bad if need and s]
+    if ests:
+        days = max(ests)
+        txt = "کمتر از ۱ روز" if days < 1 else ("بیش از ۶۰ روز" if days > 60 else f"حدود {days:.0f} روز")
+        lines.append(f"⏱ تخمین خام تا رسیدن به سطوح قیمتی: {txt} (بر اساس نوسان ۳۰ روز اخیر؛ پیش‌بینی نیست)")
+    if any(not need for _, _, need, _ in bad):
+        lines.append("⚠️ بعضی شرط‌ها قیمتی نیستند (نوسان، کشیدگی، شیب)؛ زمانشان قابل تخمین نیست.")
+    return lines
+
+
+def plan_open(name, t, live, now):
+    """Lines for a coin WITH an open trade: where the exit is."""
+    pnl = t["size"] * (live / t["entry"] - 1)
+    gap = (live / t["sl"] - 1) * 100
+    left = max(0.0, (t["opened"] + MAX_HOURS * 3600 - now) / 86400)
+    return [f"{name} · قیمت {fmt(live)} · معامله باز",
+            f"ورود {fmt(t['entry'])} | شناور {pnl:+.2f} دلار ({(live / t['entry'] - 1) * 100:+.2f}%)",
+            f"خروج: استاپ {fmt(t['sl'])} ({gap:.1f}% پایین‌تر از قیمت). با بالا رفتن قیمت، استاپ بالا می‌رود "
+            f"({ATR_SL:g} ATR پشت بالاترین قیمت {fmt(t['best'])})",
+            f"سقف زمانی: حدود {left:.0f} روز دیگر (بعد از آن بسته می‌شود)"]
+
+
+def plan_reply(st, now):
+    """On-demand report for the /plan command."""
+    head = [f"معاملات باز: {len(st['open'])} از {MAX_OPEN}"
+            + (" · ⛔ معامله‌ی جدید فعلاً متوقف است" if st.get("halted") else "")]
+    raws = {}
+    for pair, name in PAIRS:
+        try:
+            raws[name] = fetch_candles(pair, INTERVAL)
+        except Exception as e:  # noqa
+            raws[name] = e
+        time.sleep(API_PAUSE)
+
+    daily_cache = {}
+
+    def daily(pair):
+        if pair not in daily_cache:
+            raw = fetch_candles(pair, HTF_INTERVAL)
+            daily_cache[pair] = [c for c in raw if c["t"] + HTF_INTERVAL * 60 <= now]
+            time.sleep(API_PAUSE)
+        return daily_cache[pair]
+
+    btc_d = btc_sg = btc_live = None
+    try:
+        bd = daily(NAME2PAIR["BTC/USD"])
+        btc_d, btc_sg = daily_detail(bd), daily_sigma(bd)
+        if not isinstance(raws.get("BTC/USD"), Exception):
+            btc_live = raws["BTC/USD"][-1]["c"]
+    except Exception as e:  # noqa
+        print(f"[PLAN] BTC daily: {e}")
+
+    blocks = []
+    for pair, name in PAIRS:
+        raw = raws[name]
+        try:
+            if isinstance(raw, Exception):
+                raise raw
+            live = raw[-1]["c"]
+            if name in st["open"]:
+                lines = plan_open(name, st["open"][name], live, now)
+            else:
+                closed = [c for c in raw if c["t"] + PERIOD <= now]
+                if len(closed) < MIN_CANDLES:
+                    raise RuntimeError(f"فقط {len(closed)} کندل بسته موجود است")
+                lines = plan_pair(name, closed, daily(pair), live, btc_d, btc_sg, btc_live)
+                cd = st["cooldown"].get(name, 0)
+                if cd > now:
+                    lines.append(f"⏳ کول‌داون بعد از ضرر: حدود {(cd - now) / 3600:.0f} ساعت دیگر")
+        except Exception as e:  # noqa
+            lines = [f"{name}: دریافت داده ناموفق ({str(e)[:80]})"]
+        blocks.append("\n".join(lines))
+    return "\n".join(head) + "\n\n" + "\n\n".join(blocks)
+
+
 # ---------------- Telegram commands ----------------
 HELP_TEXT = ("دستورها:\n"
              "/status معاملات باز با قیمت لحظه‌ای\n"
              "/stats وضعیت کیف پول و آمار هر ارز\n"
+             "/plan چرا ورود نیست، برای ورود چه باید شود و خروج کجاست\n"
              "/help همین راهنما\n\n"
              "جواب‌ها با اجرای بعدی بات می‌آیند (معمولاً ۱ تا ۲ دقیقه). همه‌ی معاملات مجازی‌اند.")
 
@@ -575,6 +729,11 @@ def poll_commands(st, prices, now):
             out.append(status_reply(st, prices, now))
         elif cmd == "/stats":
             out.append(stats_reply(st))
+        elif cmd == "/plan":
+            try:
+                out.append(plan_reply(st, now))
+            except Exception as e:  # noqa
+                out.append(f"⚠️ ساخت گزارش ناموفق بود: {str(e)[:100]}")
         else:
             out.append("دستور ناشناخته. /help را بفرست.")
     return out
@@ -770,7 +929,7 @@ def main():
     else:
         print("[IDLE] nothing to evaluate in this run")
 
-    # Telegram commands (/status, /stats, /help)
+    # Telegram commands (/status, /stats, /plan, /help)
     msgs += poll_commands(st, prices, now)
 
     # Save first, then send (undelivered messages stay queued in the state file)
