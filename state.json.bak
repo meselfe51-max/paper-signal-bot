@@ -7,37 +7,37 @@
  "history": [],
  "pairs": {
   "BTC/USD": {
-   "last_candle": 1793548800
+   "last_candle": 1793563200
   },
   "ETH/USD": {
-   "last_candle": 1793548800
+   "last_candle": 1793563200
   },
   "SOL/USD": {
-   "last_candle": 1793548800
+   "last_candle": 1793563200
   },
   "XRP/USD": {
-   "last_candle": 1793548800
+   "last_candle": 1793563200
   },
   "ADA/USD": {
-   "last_candle": 1793548800
+   "last_candle": 1793563200
   },
   "LINK/USD": {
-   "last_candle": 1793548800
+   "last_candle": 1793563200
   },
   "AVAX/USD": {
-   "last_candle": 1793548800
+   "last_candle": 1793563200
   },
   "LTC/USD": {
-   "last_candle": 1793548800
+   "last_candle": 1793563200
   },
   "DOT/USD": {
-   "last_candle": 1793548800
+   "last_candle": 1793563200
   },
   "ATOM/USD": {
-   "last_candle": 1793548800
+   "last_candle": 1793563200
   },
   "PAXG/USD": {
-   "last_candle": 1793548800
+   "last_candle": 1793563200
   }
  },
  "cooldown": {},
