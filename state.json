@@ -47,7 +47,7 @@
  "halt_until": 0,
  "reduced_until": 0,
  "outbox": [],
- "tg_offset": 372224469,
+ "tg_offset": 372224470,
  "peak_all": 1000.0,
  "btc_warn": false
 }
