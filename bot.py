@@ -405,7 +405,7 @@ def open_msg(st, name, t, res, risk_mult):
     half = "\n(ریسک نصف است چون کیف پول از اوج افت کرده)" if risk_mult < 1 else ""
     return (f"🟢 سیگنال خرید (Long) · {name}\n"
             f"تایم‌فریم {INTERVAL // 60} ساعته · الگو: {res['setup']}\n"
-            f"کیفیت سیگنال: {res.get('score', 0):.1f} از ۱۰ · رژیم بازار: {res.get('regime', 'نامشخص')}\n"
+            f"امتیاز کیفیت: {res.get('score', 0):.1f} · رژیم بازار: {res.get('regime', 'نامشخص')}\n"
             f"عوامل تأییدشده: {'، '.join(label for label, ok in res['filters'] if ok)}\n\n"
             f"قیمت ورود: {fmt(t['entry'])}\n"
             f"حد ضرر اولیه: {fmt(t['sl'])} ({(t['sl'] / t['entry'] - 1) * 100:+.2f}%)\n"
