@@ -44,7 +44,7 @@ def to_daily(c4):
     out = []
     for t in sorted(days):
         g = days[t]
-        if len(g) < 4:
+        if len(g) < 6:
             continue
         out.append({"t": t, "o": g[0]["o"], "h": max(x["h"] for x in g), "l": min(x["l"] for x in g),
                     "c": g[-1]["c"], "v": sum(x["v"] for x in g)})
@@ -128,7 +128,7 @@ def _simulate(data):
             if i + 1 < bot.MIN_CANDLES:
                 continue
             k = bisect_right(dends[n], now_close)
-            res = bot.analyze(data[n][max(0, i + 1 - bot.WINDOW):i + 1], daily[n][max(0, k - 200):k], btc_up)
+            res = bot.analyze(data[n][max(0, i + 1 - bot.WINDOW):i + 1], daily[n][max(0, k - 200):k], btc_up, n)
             if res["ok"]:
                 # new bot ranks by "rank"; the old bot had "n" (group count)
                 pending.append((res.get("rank", res.get("n", 0)), n, res["atr"], res["setup"]))
