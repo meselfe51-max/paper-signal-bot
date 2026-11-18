@@ -10,6 +10,7 @@ import shutil
 import time
 import urllib.request
 from datetime import datetime, timezone
+from adaptive_strategy import analyze as analyze_strategy
 
 # ---------------- settings ----------------
 PAIRS = [
@@ -196,42 +197,8 @@ def daily_trend_up(d):
 
 # ---------------- signal ----------------
 def analyze(c, d, btc_up, name=""):
-    """c: closed 4h candles, d: closed daily candles, btc_up: True/False/None.
-
-    Long-only trend following. A signal needs ALL filters plus a fresh breakout:
-    the last closed 4h candle closes above the highest high of the previous DONCHIAN candles.
-    Pairs in NO_BTC_FILTER skip the BTC regime filter.
-    """
-    c = c[-WINDOW:]
-    price = c[-1]["c"]
-    res = {"ok": False, "setup": "", "filters": [], "atr": 0.0, "price": price,
-           "level": 0.0, "rank": 0.0}
-
-    own_up = daily_trend_up(d)
-    res["filters"] = [("روند روزانه صعودی", own_up is True)]
-    if name not in NO_BTC_FILTER:
-        res["filters"].append(("BTC صعودی", btc_up is True))
-    if not all(ok for _, ok in res["filters"]):
-        return res  # cheap early exit
-
-    closes = [x["c"] for x in c]
-    atr = atr_last(c)
-    e20, e200 = ema(closes, 20)[-1], ema(closes, 200)[-1]
-    level = max(x["h"] for x in c[-DONCHIAN - 1:-1])
-    res.update({"atr": atr, "level": level})
-    if len(d) > RANK_DAYS:
-        res["rank"] = d[-1]["c"] / d[-1 - RANK_DAYS]["c"] - 1
-
-    res["filters"] += [
-        ("قیمت بالای EMA200", e200 is not None and price > e200),
-        ("نوسان کافی نسبت به هزینه", ATR_PCT_MIN <= atr / price <= ATR_PCT_MAX),
-        ("قیمت کشیده نشده", e20 is not None and (price - e20) / atr <= MAX_EXT),
-    ]
-    breakout = price > level
-    if breakout:
-        res["setup"] = f"شکست سقف {DONCHIAN} کندل"
-    res["ok"] = breakout and all(ok for _, ok in res["filters"])
-    return res
+    """Score-based multi-factor strategy; legacy signature retained for backtest compatibility."""
+    return analyze_strategy(c, d, btc_up, name)
 
 
 # ---------------- state ----------------
@@ -438,7 +405,8 @@ def open_msg(st, name, t, res, risk_mult):
     half = "\n(ریسک نصف است چون کیف پول از اوج افت کرده)" if risk_mult < 1 else ""
     return (f"🟢 سیگنال خرید (Long) · {name}\n"
             f"تایم‌فریم {INTERVAL // 60} ساعته · الگو: {res['setup']}\n"
-            f"فیلترها (همه قبول): {'، '.join(label for label, _ in res['filters'])}\n\n"
+            f"کیفیت سیگنال: {res.get('score', 0):.1f} از ۱۰ · رژیم بازار: {res.get('regime', 'نامشخص')}\n"
+            f"عوامل تأییدشده: {'، '.join(label for label, ok in res['filters'] if ok)}\n\n"
             f"قیمت ورود: {fmt(t['entry'])}\n"
             f"حد ضرر اولیه: {fmt(t['sl'])} ({(t['sl'] / t['entry'] - 1) * 100:+.2f}%)\n"
             f"حد سود: ندارد؛ خروج با استاپ متحرک ({ATR_SL:g} ATR پشت بالاترین قیمت)\n"
@@ -471,12 +439,15 @@ def trail_msg(name, t, old_sl, price):
 
 
 def status_text(res):
+    score = res.get("score")
+    score_txt = f" · امتیاز {score:.1f}" if score is not None else ""
     if res["ok"]:
-        return "سیگنال فعال (شکست سقف)"
+        return f"سیگنال معتبر: {res.get('setup', 'ورود')} ({res.get('regime', 'نامشخص')}){score_txt}"
+    reasons = res.get("reasons") or []
+    if reasons:
+        return "بدون ورود · " + "، ".join(reasons[:2]) + score_txt
     failed = [label for label, ok in res["filters"] if not ok]
-    if failed:
-        return "بدون سیگنال · رد شده در: " + "، ".join(failed[:2])
-    return f"منتظر شکست سقف ({fmt(res['level'])})"
+    return ("نیازمند تأیید عوامل دیگر" if not failed else "امتیاز ناکافی: " + "، ".join(failed[:2])) + score_txt
 
 
 # ---------------- live management of an open trade ----------------
