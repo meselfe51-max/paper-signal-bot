@@ -57,3 +57,19 @@ class CompetitionLabTests(unittest.TestCase):
 
 
 if __name__ == "__main__": unittest.main()
+
+    def test_simulator_does_not_reenter_at_open_after_intrabar_exit(self):
+        from laboratory.engine import simulate_asset
+        candles = []
+        for i in range(213):
+            price = 100.0
+            candles.append({"t": i * 14400, "o": price, "h": price + 0.2,
+                            "l": price - 0.2, "c": price, "v": 1000})
+        # First position opens at bar 210 and is stopped during bar 211.
+        # The next legal entry is bar 212, never bar 211's already-passed open.
+        candles[211]["l"] = 90.0
+        def always_enter(history, regime):
+            return True
+        result = simulate_asset(candles, "TEST", "test", always_enter)
+        self.assertEqual(len(result["trades"]), 2)
+        self.assertEqual(result["trades"][1]["opened"], candles[212]["t"])
