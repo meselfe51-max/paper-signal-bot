@@ -49,5 +49,7 @@
  "outbox": [],
  "tg_offset": 372224481,
  "peak_all": 1000.0,
- "btc_warn": false
+ "btc_warn": false,
+ "diagnostics": {},
+ "tg_commands_version": 1
 }
