@@ -460,14 +460,16 @@ def record_diagnostic(st, name, res, now, reason, new_candle):
     """Persist the strategy result and the first execution gate that blocked entry."""
     item = st.setdefault("diagnostics", {}).setdefault(
         name, {"checks": 0, "strategy_pass": 0, "entries": 0, "blocked": {}, "last": {}})
+    previous_decision = item.get("last", {}).get("decision")
     is_new_candle = new_candle and item.get("last", {}).get("candle") != int(res.get("candle", 0))
+    count_outcome = is_new_candle or previous_decision == "در انتظار بررسی محدودیت‌های اجرا"
     if is_new_candle:
         item["checks"] = int(item.get("checks", 0)) + 1
         if res.get("ok"):
             item["strategy_pass"] = int(item.get("strategy_pass", 0)) + 1
-    if reason == "ورود مجازی باز شد" and is_new_candle:
+    if reason == "ورود مجازی باز شد" and count_outcome:
         item["entries"] = int(item.get("entries", 0)) + 1
-    elif reason and reason != "در انتظار بررسی محدودیت‌های اجرا" and is_new_candle:
+    elif reason and reason != "در انتظار بررسی محدودیت‌های اجرا" and count_outcome:
         blocked = item.setdefault("blocked", {})
         blocked[reason] = int(blocked.get(reason, 0)) + 1
     item["last"] = {
