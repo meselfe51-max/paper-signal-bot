@@ -18,7 +18,7 @@ class CompetitionLabTests(unittest.TestCase):
     def test_regime_is_explicit_and_causal(self):
         candles = rising()
         result = classify_regime(candles[:220])
-        self.assertIn(result["trend"], {"bullish", "bearish", "sideways", "unknown"})
+        self.assertIn(result["trend"], {"bullish", "bearish", "sideways", "transition", "unknown"})
         self.assertIn(result["volatility"], {"high", "normal", "low", "unknown"})
         changed_future = candles[:220] + [{**x, "c": x["c"] * 5, "h": x["h"] * 5,
                                            "l": x["l"] * 5, "o": x["o"] * 5}
