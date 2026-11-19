@@ -132,3 +132,14 @@ def existing_adaptive(c, regime, btc_up=None, pair_name="BTC/USD"):
     daily = daily_from_4h(c)
     result = analyze(c, daily, btc_up, pair_name)
     return bool(result.get("ok"))
+
+
+STRATEGIES = {
+    "trend_following": trend_following,
+    "mean_reversion": mean_reversion,
+    "momentum": momentum,
+    "breakout": breakout,
+    "volatility_expansion": volatility_expansion,
+    "range_rotation": range_rotation,
+    "existing_adaptive_baseline": existing_adaptive,
+}
