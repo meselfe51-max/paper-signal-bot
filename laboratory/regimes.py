@@ -15,12 +15,13 @@ def _ema(values, period):
 def _atr_pct(candles, period=14):
     if len(candles) < period + 1 or candles[-1]["c"] <= 0:
         return None
+    # Only the last ATR window contributes; do not rescan the full historical prefix.
     ranges = []
-    for i in range(1, len(candles)):
+    for i in range(len(candles) - period, len(candles)):
         cur, prev = candles[i], candles[i - 1]
         ranges.append(max(cur["h"] - cur["l"], abs(cur["h"] - prev["c"]),
                           abs(cur["l"] - prev["c"])))
-    return (sum(ranges[-period:]) / period) / candles[-1]["c"]
+    return (sum(ranges) / period) / candles[-1]["c"]
 
 
 def classify_regime(candles):
