@@ -33,8 +33,8 @@ class HistoricalDataTests(unittest.TestCase):
             os.makedirs(folder)
             path = os.path.join(folder, "XBTUSD_240.csv")
             with open(path, "w", encoding="utf-8") as f:
-                f.write("0,10,11,9,10,100,5\\n")
-                f.write("14400,10,12,9,11,120,7\\n")
+                f.write("0,10,11,9,10,100,5\n")
+                f.write("14400,10,12,9,11,120,7\n")
             self.assertEqual(len(read_csv(path)), 2)
             self.assertEqual(find_pair_file(tmp, "XBTUSD"), path)
 
