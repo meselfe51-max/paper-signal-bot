@@ -1,6 +1,7 @@
 """Equal-conditions, isolated paper simulator for strategy competition."""
 from .regimes import classify_regime
-from bisect import bisect_right\nfrom .strategies import STRATEGIES, atr, daily_from_4h, daily_trend_up, existing_adaptive
+from bisect import bisect_right
+from .strategies import STRATEGIES, atr, daily_from_4h, daily_trend_up, existing_adaptive
 
 START_EQUITY = 1000.0
 RISK_FRACTION = 0.0075
