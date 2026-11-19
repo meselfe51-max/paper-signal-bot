@@ -10,7 +10,7 @@ import shutil
 import time
 import urllib.request
 from datetime import datetime, timezone
-from adaptive_strategy import analyze as analyze_strategy
+from adaptive_strategy import analyze as analyze_strategy, ENTRY_SCORE as STRATEGY_ENTRY_SCORE
 
 # ---------------- settings ----------------
 PAIRS = [
@@ -460,18 +460,19 @@ def record_diagnostic(st, name, res, now, reason, new_candle):
     """Persist the strategy result and the first execution gate that blocked entry."""
     item = st.setdefault("diagnostics", {}).setdefault(
         name, {"checks": 0, "strategy_pass": 0, "entries": 0, "blocked": {}, "last": {}})
-    if new_candle:
+    is_new_candle = new_candle and item.get("last", {}).get("candle") != int(res.get("candle", 0))
+    if is_new_candle:
         item["checks"] = int(item.get("checks", 0)) + 1
         if res.get("ok"):
             item["strategy_pass"] = int(item.get("strategy_pass", 0)) + 1
-        if reason == "ورود مجازی باز شد":
-            item["entries"] = int(item.get("entries", 0)) + 1
-        elif reason:
-            blocked = item.setdefault("blocked", {})
-            blocked[reason] = int(blocked.get(reason, 0)) + 1
+    if reason == "ورود مجازی باز شد" and is_new_candle:
+        item["entries"] = int(item.get("entries", 0)) + 1
+    elif reason and reason != "در انتظار بررسی محدودیت‌های اجرا" and is_new_candle:
+        blocked = item.setdefault("blocked", {})
+        blocked[reason] = int(blocked.get(reason, 0)) + 1
     item["last"] = {
         "at": int(now), "candle": int(res.get("candle", 0)),
-        "score": float(res.get("score", 0)), "threshold": 6.0,
+        "score": float(res.get("score", 0)), "threshold": STRATEGY_ENTRY_SCORE,
         "regime": res.get("regime", "unknown"), "setup": res.get("setup", ""),
         "strategy_ok": bool(res.get("ok")),
         "failed_filters": [label for label, passed in res.get("filters", []) if not passed],
@@ -559,7 +560,7 @@ def plan_pair(name, c4, d, live, btc_up):
     """Report the SAME score-based entry decision used by the live strategy."""
     res = analyze(c4[-WINDOW:], d[-200:], btc_up, name)
     lines = [f"{name} · قیمت فعلی {fmt(live)}",
-             f"امتیاز استراتژی: {res.get('score', 0):.2f} / حد ورود {analyze_strategy.ENTRY_SCORE if hasattr(analyze_strategy, 'ENTRY_SCORE') else 6.0:.1f}",
+             f"امتیاز استراتژی: {res.get('score', 0):.2f} / حد ورود {STRATEGY_ENTRY_SCORE:.1f}",
              f"رژیم روزانه: {res.get('regime', 'نامشخص')}"]
     if res.get("setup"):
         lines.append(f"الگوی شناسایی‌شده: {res['setup']}")
