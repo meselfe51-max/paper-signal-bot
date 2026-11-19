@@ -583,7 +583,7 @@ def plan_reply(st, now):
                 closed = [c for c in raw if c["t"] + PERIOD <= now]
                 if len(closed) < MIN_CANDLES:
                     raise RuntimeError(f"فقط {len(closed)} کندل بسته موجود است")
-                lines = plan_pair(name, closed, daily(pair), live, btc_d, btc_live)
+                lines = plan_pair(name, closed, daily(pair), live, btc_d[0] if btc_d is not None else None)
                 cd = st["cooldown"].get(name, 0)
                 if cd > now:
                     lines.append(f"⏳ کول‌داون بعد از ضرر: حدود {(cd - now) / 3600:.0f} ساعت دیگر")
