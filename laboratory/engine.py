@@ -71,6 +71,8 @@ def simulate_asset(candles, pair, strategy_name, signal_fn):
     if position:
         equity, trade = _close_trade(position, candles[-1]["c"], "end_of_data", equity, candles[-1]["t"])
         trades.append(trade)
+        peak = max(peak, equity)
+        max_dd = max(max_dd, (peak - equity) / peak * 100 if peak else 0.0)
         curve.append({"t": candles[-1]["t"], "equity": equity})
     return {"strategy": strategy_name, "pair": pair, "start_equity": START_EQUITY,
             "final_equity": equity, "return_pct": (equity / START_EQUITY - 1) * 100,
