@@ -32,6 +32,8 @@ def classify_regime(candles):
     prior_e50 = _ema(closes[-105:-5], 50) if len(closes) >= 105 else None
     if e20 is None or e50 is None:
         trend = "unknown"
+    elif (e20 > e50 and closes[-1] <= e50) or (e20 < e50 and closes[-1] >= e50):
+        trend = "transition"
     elif closes[-1] > e50 and e20 > e50 and (prior_e50 is None or e50 > prior_e50):
         trend = "bullish"
     elif closes[-1] < e50 and e20 < e50 and (prior_e50 is None or e50 < prior_e50):
