@@ -26,13 +26,14 @@ def _close_trade(position, raw_exit, reason, equity, ts):
     return equity + net, trade
 
 
-def simulate_asset(candles, pair, strategy_name, signal_fn):
-    """One strategy/asset isolated account. Signal at close, fill at next bar open."""
+def simulate_asset(candles, pair, strategy_name, signal_fn, regime_cache=None):
+    """Signal at a completed close, fill next open; never re-enter on an exit bar."""
     equity, peak, max_dd = START_EQUITY, START_EQUITY, 0.0
     position, trades = None, []
     curve = []
     for i in range(210, len(candles)):
         bar = candles[i]
+        had_position_at_bar_start = position is not None
         if position:
             position["bars"] += 1
             risk_per_unit = max(position["entry"] - position["stop"], 1e-12)
@@ -41,26 +42,35 @@ def simulate_asset(candles, pair, strategy_name, signal_fn):
             hit_stop = bar["l"] <= position["stop"]
             hit_target = bar["h"] >= position["target"]
             if hit_stop or hit_target or position["bars"] >= MAX_HOLD_BARS:
-                if hit_stop: raw_exit, reason = position["stop"], "stop (priority if both touched)"
-                elif hit_target: raw_exit, reason = position["target"], "target"
-                else: raw_exit, reason = bar["c"], "time_exit"
+                if hit_stop:
+                    # A stop crossed by an opening gap fills at the worse opening price.
+                    raw_exit = min(bar["o"], position["stop"])
+                    reason = "stop (priority if both touched)"
+                elif hit_target:
+                    raw_exit, reason = position["target"], "target"
+                else:
+                    raw_exit, reason = bar["c"], "time_exit"
                 equity, trade = _close_trade(position, raw_exit, reason, equity, bar["t"])
                 trades.append(trade)
                 position = None
-        if position is None and i >= 1:
+
+        # A position closed intrabar cannot be replaced at that same bar's already-passed open.
+        if position is None and not had_position_at_bar_start:
             history = candles[:i]
-            regime = classify_regime(history)
+            regime = regime_cache[i] if regime_cache is not None else classify_regime(history)
             if signal_fn(history, regime):
                 signal_atr = atr(history)
                 if signal_atr and signal_atr > 0:
                     entry = bar["o"] * (1 + SLIPPAGE)
                     stop = entry - STOP_ATR * signal_atr
-                    risk_cash = equity * RISK_FRACTION
-                    qty = min(risk_cash / (entry - stop), equity * MAX_NOTIONAL_FRACTION / entry)
+                    planned_risk = equity * RISK_FRACTION
+                    qty = min(planned_risk / (entry - stop),
+                              equity * MAX_NOTIONAL_FRACTION / entry)
                     if qty > 0 and entry > stop:
+                        actual_risk = qty * (entry - stop)
                         position = {"pair": pair, "opened": bar["t"], "entry": entry,
                                     "stop": stop, "target": entry + (entry - stop) * TARGET_R,
-                                    "qty": qty, "risk_cash": risk_cash, "regime": regime["regime"],
+                                    "qty": qty, "risk_cash": actual_risk, "regime": regime["regime"],
                                     "mae_r": 0.0, "mfe_r": 0.0, "bars": 0}
         marked = equity
         if position:
@@ -82,9 +92,11 @@ def simulate_asset(candles, pair, strategy_name, signal_fn):
 def run_competition(data, strategies=None):
     selected = strategies or STRATEGIES
     results = []
-    for strategy_name, signal_fn in selected.items():
-        for pair, candles in sorted(data.items()):
-            if len(candles) < 211:
-                continue
-            results.append(simulate_asset(candles, pair, strategy_name, signal_fn))
+    for pair, candles in sorted(data.items()):
+        if len(candles) < 211:
+            continue
+        # Regime is a property of the market history, not of a contestant.
+        regime_cache = {i: classify_regime(candles[:i]) for i in range(210, len(candles))}
+        for strategy_name, signal_fn in selected.items():
+            results.append(simulate_asset(candles, pair, strategy_name, signal_fn, regime_cache))
     return results
