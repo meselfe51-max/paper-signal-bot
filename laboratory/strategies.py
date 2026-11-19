@@ -25,10 +25,13 @@ def rsi(closes, period=14):
 def atr(candles, period=14):
     if len(candles) < period + 1:
         return None
+    # Only the trailing period is needed; avoid rescanning years of history per candle.
+    start = len(candles) - period
     tr = [max(candles[i]["h"] - candles[i]["l"],
               abs(candles[i]["h"] - candles[i-1]["c"]),
-              abs(candles[i]["l"] - candles[i-1]["c"])) for i in range(1, len(candles))]
-    return sum(tr[-period:]) / period
+              abs(candles[i]["l"] - candles[i-1]["c"]))
+          for i in range(start, len(candles))]
+    return sum(tr) / period
 
 
 def _base(c):
@@ -74,7 +77,8 @@ def breakout(c, regime):
 def volatility_expansion(c, regime):
     if len(c) < 50: return False
     current_atr = atr(c)
-    prior_atrs = [atr(c[:end]) for end in range(len(c) - 31, len(c) - 1)]
+    recent = c[-45:]
+    prior_atrs = [atr(recent[:end]) for end in range(len(recent) - 31, len(recent) - 1)]
     prior_atrs = [x for x in prior_atrs if x is not None]
     if not prior_atrs or current_atr is None: return False
     expanding = current_atr > (sum(prior_atrs) / len(prior_atrs)) * 1.2
@@ -93,6 +97,9 @@ def existing_adaptive(c, regime):
     """Run the repository's current adaptive strategy as a benchmark, unchanged."""
     if len(c) < 210: return False
     from adaptive_strategy import analyze
+    # The adaptive strategy only needs its most recent 200 daily bars; 1,200 4h bars
+    # provide that window while avoiding an O(history^2) grouping cost in long tests.
+    c = c[-1200:]
     grouped = {}
     for candle in c:
         day = candle["t"] // 86400 * 86400
