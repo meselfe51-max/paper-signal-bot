@@ -1,7 +1,7 @@
 """Multi-coin paper-trading bot v4 - long-only spot, ONE shared wallet.
 
 Trend following: daily regime filter + 4h Donchian breakout + ATR chandelier trailing stop.
-Kraken prices, Telegram alerts. Runs from GitHub Actions (triggered every minute).
+Kraken prices, Telegram alerts. Runs from GitHub Actions (Cloudflare-triggered every 5 minutes, with an hourly fallback).
 Pure standard library - no pip install needed.
 """
 import json
