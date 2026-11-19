@@ -55,5 +55,19 @@ class CompetitionLabTests(unittest.TestCase):
         many = [{"strategy": "A", "regime": "bullish_normal", "closed": i, "r": .2} for i in range(1, 15)]
         self.assertEqual(select_strategy(many, "bullish_normal", as_of=20, min_trades=12), "A")
 
+    def test_simulator_does_not_reenter_at_open_after_intrabar_exit(self):
+        candles = []
+        for i in range(213):
+            price = 100.0
+            candles.append({"t": i * 14400, "o": price, "h": price + 0.2,
+                            "l": price - 0.2, "c": price, "v": 1000})
+        candles[211]["l"] = 90.0
+        def always_enter(history, regime):
+            return True
+        result = simulate_asset(candles, "TEST", "test", always_enter)
+        self.assertEqual(len(result["trades"]), 2)
+        self.assertEqual(result["trades"][1]["opened"], candles[212]["t"])
 
-if __name__ == "__main__": unittest.main()
+
+if __name__ == "__main__":
+    unittest.main()

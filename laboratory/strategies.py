@@ -25,10 +25,13 @@ def rsi(closes, period=14):
 def atr(candles, period=14):
     if len(candles) < period + 1:
         return None
+    # Only the trailing period is needed; avoid rescanning years of history per candle.
+    start = len(candles) - period
     tr = [max(candles[i]["h"] - candles[i]["l"],
               abs(candles[i]["h"] - candles[i-1]["c"]),
-              abs(candles[i]["l"] - candles[i-1]["c"])) for i in range(1, len(candles))]
-    return sum(tr[-period:]) / period
+              abs(candles[i]["l"] - candles[i-1]["c"]))
+          for i in range(start, len(candles))]
+    return sum(tr) / period
 
 
 def _base(c):
@@ -74,7 +77,8 @@ def breakout(c, regime):
 def volatility_expansion(c, regime):
     if len(c) < 50: return False
     current_atr = atr(c)
-    prior_atrs = [atr(c[:end]) for end in range(len(c) - 31, len(c) - 1)]
+    recent = c[-45:]
+    prior_atrs = [atr(recent[:end]) for end in range(len(recent) - 31, len(recent) - 1)]
     prior_atrs = [x for x in prior_atrs if x is not None]
     if not prior_atrs or current_atr is None: return False
     expanding = current_atr > (sum(prior_atrs) / len(prior_atrs)) * 1.2
@@ -89,12 +93,10 @@ def range_rotation(c, regime):
     return c[-1]["l"] <= lows * 1.005 and c[-1]["c"] > c[-1]["o"] and strength < 48
 
 
-def existing_adaptive(c, regime):
-    """Run the repository's current adaptive strategy as a benchmark, unchanged."""
-    if len(c) < 210: return False
-    from adaptive_strategy import analyze
+def daily_from_4h(candles):
+    """Aggregate completed UTC days from 4h candles."""
     grouped = {}
-    for candle in c:
+    for candle in candles[-1200:]:
         day = candle["t"] // 86400 * 86400
         grouped.setdefault(day, []).append(candle)
     daily = []
@@ -103,7 +105,32 @@ def existing_adaptive(c, regime):
             daily.append({"t": day, "o": group[0]["o"],
                           "h": max(x["h"] for x in group), "l": min(x["l"] for x in group),
                           "c": group[-1]["c"], "v": sum(x.get("v", 0) for x in group)})
-    result = analyze(c, daily, True, "BTC/USD")
+    return daily
+
+
+def daily_trend_up(daily):
+    """Match bot.daily_trend_up: 80 daily bars, close above rising EMA50."""
+    if len(daily) < 80:
+        return None
+    closes = [x["c"] for x in daily[-200:]]
+    if len(closes) < 55:
+        return None
+    alpha = 2.0 / 51.0
+    value = sum(closes[:50]) / 50
+    ema_values = [value]
+    for close in closes[50:]:
+        value = alpha * close + (1.0 - alpha) * value
+        ema_values.append(value)
+    return bool(closes[-1] > ema_values[-1] and ema_values[-1] > ema_values[-6])
+
+
+def existing_adaptive(c, regime, btc_up=None, pair_name="BTC/USD"):
+    """Run the current adaptive strategy with the matching historical BTC context."""
+    if len(c) < 210:
+        return False
+    from adaptive_strategy import analyze
+    daily = daily_from_4h(c)
+    result = analyze(c, daily, btc_up, pair_name)
     return bool(result.get("ok"))
 
 
