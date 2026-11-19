@@ -93,15 +93,10 @@ def range_rotation(c, regime):
     return c[-1]["l"] <= lows * 1.005 and c[-1]["c"] > c[-1]["o"] and strength < 48
 
 
-def existing_adaptive(c, regime):
-    """Run the repository's current adaptive strategy as a benchmark, unchanged."""
-    if len(c) < 210: return False
-    from adaptive_strategy import analyze
-    # The adaptive strategy only needs its most recent 200 daily bars; 1,200 4h bars
-    # provide that window while avoiding an O(history^2) grouping cost in long tests.
-    c = c[-1200:]
+def daily_from_4h(candles):
+    """Aggregate completed UTC days from 4h candles."""
     grouped = {}
-    for candle in c:
+    for candle in candles[-1200:]:
         day = candle["t"] // 86400 * 86400
         grouped.setdefault(day, []).append(candle)
     daily = []
@@ -110,16 +105,30 @@ def existing_adaptive(c, regime):
             daily.append({"t": day, "o": group[0]["o"],
                           "h": max(x["h"] for x in group), "l": min(x["l"] for x in group),
                           "c": group[-1]["c"], "v": sum(x.get("v", 0) for x in group)})
-    result = analyze(c, daily, True, "BTC/USD")
+    return daily
+
+
+def daily_trend_up(daily):
+    """Match bot.daily_trend_up: 80 daily bars, close above rising EMA50."""
+    if len(daily) < 80:
+        return None
+    closes = [x["c"] for x in daily[-200:]]
+    if len(closes) < 55:
+        return None
+    alpha = 2.0 / 51.0
+    value = sum(closes[:50]) / 50
+    ema_values = [value]
+    for close in closes[50:]:
+        value = alpha * close + (1.0 - alpha) * value
+        ema_values.append(value)
+    return bool(closes[-1] > ema_values[-1] and ema_values[-1] > ema_values[-6])
+
+
+def existing_adaptive(c, regime, btc_up=None, pair_name="BTC/USD"):
+    """Run the current adaptive strategy with the matching historical BTC context."""
+    if len(c) < 210:
+        return False
+    from adaptive_strategy import analyze
+    daily = daily_from_4h(c)
+    result = analyze(c, daily, btc_up, pair_name)
     return bool(result.get("ok"))
-
-
-STRATEGIES = {
-    "trend_following": trend_following,
-    "mean_reversion": mean_reversion,
-    "momentum": momentum,
-    "breakout": breakout,
-    "volatility_expansion": volatility_expansion,
-    "range_rotation": range_rotation,
-    "existing_adaptive_baseline": existing_adaptive,
-}
