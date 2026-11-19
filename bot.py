@@ -206,7 +206,8 @@ def new_state():
     return {"v": STATE_VERSION, "kind": STATE_KIND, "balance": START_BALANCE, "peak": START_BALANCE,
             "peak_all": START_BALANCE, "open": {},
             "history": [], "pairs": {}, "cooldown": {}, "last_daily": "", "failed": [],
-            "halted": False, "halt_until": 0, "reduced_until": 0, "outbox": [], "btc_warn": False}
+            "halted": False, "halt_until": 0, "reduced_until": 0, "outbox": [], "btc_warn": False,
+            "diagnostics": {}}
 
 
 def _read(path):
@@ -222,6 +223,8 @@ def valid_state(st):
 def fill_defaults(st):
     for k, v in new_state().items():
         st.setdefault(k, v)
+    if not isinstance(st.get("diagnostics"), dict):
+        st["diagnostics"] = {}
     if st.get("peak_all", 0) < st["peak"]:
         st["peak_all"] = st["peak"]
     return st
@@ -450,6 +453,52 @@ def status_text(res):
     return ("نیازمند تأیید عوامل دیگر" if not failed else "امتیاز ناکافی: " + "، ".join(failed[:2])) + score_txt
 
 
+
+
+
+def record_diagnostic(st, name, res, now, reason, new_candle):
+    """Persist the strategy result and the first execution gate that blocked entry."""
+    item = st.setdefault("diagnostics", {}).setdefault(
+        name, {"checks": 0, "strategy_pass": 0, "entries": 0, "blocked": {}, "last": {}})
+    if new_candle:
+        item["checks"] = int(item.get("checks", 0)) + 1
+        if res.get("ok"):
+            item["strategy_pass"] = int(item.get("strategy_pass", 0)) + 1
+        if reason == "ورود مجازی باز شد":
+            item["entries"] = int(item.get("entries", 0)) + 1
+        elif reason:
+            blocked = item.setdefault("blocked", {})
+            blocked[reason] = int(blocked.get(reason, 0)) + 1
+    item["last"] = {
+        "at": int(now), "candle": int(res.get("candle", 0)),
+        "score": float(res.get("score", 0)), "threshold": 6.0,
+        "regime": res.get("regime", "unknown"), "setup": res.get("setup", ""),
+        "strategy_ok": bool(res.get("ok")),
+        "failed_filters": [label for label, passed in res.get("filters", []) if not passed],
+        "strategy_reasons": list(res.get("reasons", [])),
+        "decision": reason or ("در انتظار بررسی محدودیت‌های اجرا" if res.get("ok") else "شرایط استراتژی برقرار نیست")
+    }
+
+
+def diagnostics_reply(st):
+    lines = ["گزارش تشخیصی ورودها (فقط شبیه‌سازی):"]
+    for _, name in PAIRS:
+        item = st.get("diagnostics", {}).get(name)
+        if not item or not item.get("last"):
+            lines.append(f"\\n{name}: هنوز تحلیل ثبت نشده.")
+            continue
+        last = item["last"]
+        top = sorted(item.get("blocked", {}).items(), key=lambda x: -x[1])[:3]
+        blocked = "؛ ".join(f"{k}: {v}" for k, v in top) or "مانع ثبت‌شده‌ای ندارد"
+        failed = "، ".join(last.get("failed_filters", [])) or "هیچ‌کدام"
+        lines.append(
+            f"\\n{name} | بررسی {item.get('checks', 0)} | عبور استراتژی {item.get('strategy_pass', 0)} | ورود مجازی {item.get('entries', 0)}"
+            f"\\nامتیاز {last.get('score', 0):.2f}/{last.get('threshold', 6):.1f} | رژیم {last.get('regime')} | الگو {last.get('setup') or 'ندارد'}"
+            f"\\nتصمیم اخیر: {last.get('decision')}\\nفیلترهای ردشده: {failed}"
+            f"\\nموانع پرتکرار: {blocked}"
+        )
+    return "\\n".join(lines)
+
 # ---------------- live management of an open trade ----------------
 def manage_live(st, name, raw_m, now):
     """Returns ("exit"|"trail", text) or None."""
@@ -598,6 +647,7 @@ HELP_TEXT = ("دستورها:\n"
              "/status معاملات باز با قیمت لحظه‌ای\n"
              "/stats وضعیت کیف پول و آمار هر ارز\n"
              "/plan هر ارز چقدر باید بالا یا پایین برود تا ورود یا خروج شود\n"
+             "/diagnostics علت رد یا عبور هر ارز از شروط ورود\n"
              "/help همین راهنما\n\n"
              "جواب‌ها با اجرای بعدی بات می‌آیند (معمولاً ۱ تا ۲ دقیقه). همه‌ی معاملات مجازی‌اند.")
 
@@ -660,6 +710,8 @@ def poll_commands(st, prices, now):
                 out.append(plan_reply(st, now))
             except Exception as e:  # noqa
                 out.append(f"⚠️ ساخت گزارش ناموفق بود: {str(e)[:100]}")
+        elif cmd == "/diagnostics":
+            out.append(diagnostics_reply(st))
         else:
             out.append("دستور ناشناخته. /help را بفرست.")
     return out
@@ -762,25 +814,38 @@ def market_cycle(st, now, msgs, report_due, today):
             print(f"[ERROR] analyze {name}: {e}")  # candle not marked as seen: retried next run
             continue
         analyses[name] = res
+        res["candle"] = last["t"]
         if not new_candle:
             continue
+        if not res["ok"]:
+            record_diagnostic(st, name, res, now, "رد شروط خود استراتژی", True)
         if ps["last_candle"]:
             missed = (last["t"] - ps["last_candle"]) // PERIOD - 1
             if missed >= 1:
                 gaps.append(f"{name}: {missed}")
         ps["last_candle"] = last["t"]
-        if name in st["open"] or name in exited or not res["ok"]:
+        if name in st["open"]:
+            record_diagnostic(st, name, res, now, "برای این ارز معامله‌ی باز وجود دارد", True)
+            continue
+        if name in exited:
+            record_diagnostic(st, name, res, now, "معامله‌ی همین ارز در این چرخه بسته شد", True)
+            continue
+        if not res["ok"]:
             continue
         if st["cooldown"].get(name, 0) > now:
+            record_diagnostic(st, name, res, now, "دوره‌ی انتظار پس از ضرر فعال است", True)
             continue
         age = now - (last["t"] + PERIOD)
         if age > MAX_SIGNAL_AGE:
+            record_diagnostic(st, name, res, now, "سیگنال دیر شناسایی شد", True)
             msgs.append(f"⚪ سیگنال خرید {name} رد شد: {age / 60:.0f} دقیقه بعد از بسته شدن کندل پیدا شد (دیر).")
             continue
         if data[name]["price"] - last["c"] > MAX_CHASE * res["atr"]:
+            record_diagnostic(st, name, res, now, "قیمت بیش از حد از نقطه‌ی سیگنال فاصله گرفته", True)
             msgs.append(f"⚪ سیگنال خرید {name} رد شد: قیمت از نقطه‌ی سیگنال ({fmt(last['c'])}) "
                         f"بیش از {MAX_CHASE:g} ATR بالاتر رفته ({fmt(data[name]['price'])}).")
             continue
+        record_diagnostic(st, name, res, now, "در انتظار بررسی محدودیت‌های اجرا", True)
         cands.append((res["rank"], name, res))
 
     if gaps:
@@ -794,13 +859,16 @@ def market_cycle(st, now, msgs, report_due, today):
     # 5) open new trades: strongest recent momentum first, limited by cash, count and total risk
     for _, name, res in sorted(cands, key=lambda x: -x[0]):
         if st["halted"]:
+            record_diagnostic(st, name, res, now, "توقف حفاظتی کیف پول فعال است", True)
             msgs.append(f"⚪ سیگنال خرید {name} رد شد: معامله‌ی جدید به خاطر افت کیف پول متوقف است.")
             continue
         entry = data[name]["price"] * (1 + SLIP)
         t, why = open_position(st, name, entry, res["atr"], now, res["setup"], risk_mult)
         if t is None:
+            record_diagnostic(st, name, res, now, why, True)
             msgs.append(f"⚪ سیگنال خرید {name} رد شد: {why}.")
             continue
+        record_diagnostic(st, name, res, now, "ورود مجازی باز شد", True)
         msgs.append(open_msg(st, name, t, res, risk_mult))
 
     # 6) daily report
