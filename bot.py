@@ -506,81 +506,29 @@ def daily_detail(d):
     return (bool(closes[-1] > e[-1] and e[-1] > e[-6]), closes[-1], e[-1], e[-1] / e[-6] - 1)
 
 
-def plan_pair(name, c4, d, live, btc_d, btc_live):
-    """Lines for a coin WITHOUT an open trade. Mirrors analyze() but checks every condition."""
-    c = c4[-WINDOW:]
-    closes = [x["c"] for x in c]
-    last = closes[-1]
-    atr = atr_last(c)
-    e20, e200 = ema(closes, 20)[-1], ema(closes, 200)[-1]
-    level = max(x["h"] for x in c[-DONCHIAN - 1:-1])
-    reasons, up, other = [], [], []
-    btc_level = btc_ref = down = None
-
-    dd = daily_detail(d)
-    if dd is None:
-        other.append("داده‌ی روزانه کافی نیست")
-    elif not dd[0]:
-        reasons.append("روند روزانه")
-        if dd[2] > live:
-            up.append(dd[2])
-        else:
-            other.append("روند روزانه: منتظر بسته‌شدن کندل روزانه بالای EMA50 و رو به بالا شدن آن")
-
-    if last <= e200:
-        reasons.append("EMA200")
-        if e200 > live:
-            up.append(e200)
-        else:
-            other.append("منتظر بسته‌شدن کندل ۴ساعته بالای EMA200")
-
-    if last <= level:
-        reasons.append("شکست سقف")
-        if level > live:
-            up.append(level)
-        else:
-            other.append(f"منتظر بسته‌شدن کندل ۴ساعته بالای سقف {fmt(level)}")
-
-    ap = atr / last
-    if ap < ATR_PCT_MIN:
-        reasons.append("نوسان کم")
-        other.append(f"نوسان: ATR {ap * 100:.2f}% (حداقل {ATR_PCT_MIN * 100:.2f}%) · با قیمت حل نمی‌شود")
-    elif ap > ATR_PCT_MAX:
-        reasons.append("نوسان زیاد")
-        other.append(f"نوسان: ATR {ap * 100:.2f}% (حداکثر {ATR_PCT_MAX * 100:.0f}%) · با قیمت حل نمی‌شود")
-
-    if (last - e20) / atr > MAX_EXT:
-        reasons.append("قیمت بیش از حد بالا رفته")
-        down = e20 + MAX_EXT * atr
-
-    if name not in NO_BTC_FILTER and name != "BTC/USD":
-        if btc_d is None:
-            other.append("داده‌ی روزانه‌ی BTC کافی نیست")
-        elif not btc_d[0]:
-            reasons.append("دروازه BTC")
-            btc_ref = btc_live or btc_d[1]
-            if btc_d[2] > btc_ref:
-                btc_level = btc_d[2]
-            else:
-                other.append("BTC: منتظر بسته‌شدن کندل روزانه بالای EMA50 و رو به بالا شدن آن")
-
-    lines = [f"{name} · {fmt(live)}"]
-    if not reasons and not other:
-        lines.append("✅ شرط‌های ورود برقرار است؛ در بررسی کندل بعدی سیگنال ثبت می‌شود.")
-        return lines
-    lines.append("❌ ورود بسته است")
-    if up:
-        target = max(up)
-        lines.append(f"باید بالا برود تا {fmt(target)} ({move_text(target, live)})")
-    if btc_level:
-        lines.append(f"BTC هم باید بالا برود تا {fmt(btc_level)} ({move_text(btc_level, btc_ref)})")
-    if down and down < live:
-        lines.append(f"باید کمی پایین بیاید تا {fmt(down)} ({move_text(down, live)})")
-    lines.extend(other)
+def plan_pair(name, c4, d, live, btc_up):
+    """Report the SAME score-based entry decision used by the live strategy."""
+    res = analyze(c4[-WINDOW:], d[-200:], btc_up, name)
+    lines = [f"{name} · قیمت فعلی {fmt(live)}",
+             f"امتیاز استراتژی: {res.get('score', 0):.2f} / حد ورود {analyze_strategy.ENTRY_SCORE if hasattr(analyze_strategy, 'ENTRY_SCORE') else 6.0:.1f}",
+             f"رژیم روزانه: {res.get('regime', 'نامشخص')}"]
+    if res.get("setup"):
+        lines.append(f"الگوی شناسایی‌شده: {res['setup']}")
+    if res.get("ok"):
+        lines.append("✅ شرایط امتیازی ورود در آخرین کندل بسته‌شده برقرار است.")
+    else:
+        lines.append("❌ در آخرین بررسی، شرط ورود برقرار نیست.")
+    passed = [label for label, ok in res.get("filters", []) if ok]
+    failed = [label for label, ok in res.get("filters", []) if not ok]
+    if passed:
+        lines.append("تأییدشده: " + "، ".join(passed))
+    if failed:
+        lines.append("تأییدنشده: " + "، ".join(failed))
+    reasons = res.get("reasons") or []
     if reasons:
-        lines.append("دلیل: " + "، ".join(reasons))
+        lines.append("دلایل/هشدارها: " + "، ".join(dict.fromkeys(reasons)))
+    lines.append("توجه: این گزارش بر اساس کندل‌های بسته‌شده و همان امتیازدهی adaptive_strategy است؛ قیمت لحظه‌ای به‌تنهایی سیگنال را فعال نمی‌کند.")
     return lines
-
 
 def plan_open(name, t, live, now):
     """Lines for a coin WITH an open trade: where the exit is."""
