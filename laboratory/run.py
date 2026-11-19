@@ -35,12 +35,15 @@ def load_live_data():
     # Reuse the project's existing public OHLC reader; this does not place orders.
     from bot import fetch_candles, INTERVAL
     data = {}
+    now = time.time()
     for symbol in PAIRS:
         try:
             candles = fetch_candles(symbol, INTERVAL)
+            # Kraken's final OHLC row may still be forming; never use it in a backtest.
+            candles = [row for row in candles if row["t"] + INTERVAL * 60 <= now]
             if len(candles) >= 211:
                 data[symbol] = candles
-            print(f"[DATA] {symbol}: {len(candles)} candles")
+            print(f"[DATA] {symbol}: {len(candles)} closed candles")
         except Exception as exc:
             print(f"[DATA ERROR] {symbol}: {exc}")
         time.sleep(1)
