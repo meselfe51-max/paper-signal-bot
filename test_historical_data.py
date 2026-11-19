@@ -39,19 +39,28 @@ class HistoricalDataTests(unittest.TestCase):
             self.assertEqual(find_pair_file(tmp, "XBTUSD"), path)
             self.assertEqual(find_pair_files(tmp, "XBTUSD"), [path])
 
-    def test_merges_full_and_incremental_csvs(self):
+    def test_merges_same_pair_from_full_and_incremental_archives(self):
         with tempfile.TemporaryDirectory() as tmp:
-            folder = os.path.join(tmp, "nested")
-            os.makedirs(folder)
-            a = os.path.join(folder, "XBTUSD_240.csv")
-            b = os.path.join(folder, "XBTUSD_240_update.csv")
-            # Name matching is intentionally strict: update suffixes are not treated as a
-            # separate market file because only canonical pair_interval files are accepted.
-            with open(a, "w", encoding="utf-8") as f:
-                f.write("0,10,11,9,10,100,5\n")
-            with open(b, "w", encoding="utf-8") as f:
-                f.write("14400,10,12,9,11,120,7\n")
-            self.assertEqual(find_pair_files(tmp, "XBTUSD"), [a])
+            full_dir = os.path.join(tmp, "full")
+            update_dir = os.path.join(tmp, "incremental")
+            os.makedirs(full_dir)
+            os.makedirs(update_dir)
+            full_path = os.path.join(full_dir, "XBTUSD_240.csv")
+            update_path = os.path.join(update_dir, "XBTUSD_240.csv")
+            with open(full_path, "w", encoding="utf-8") as f:
+                for i in range(211):
+                    price = 100 + i * 0.01
+                    f.write(f"{i * 14400},{price},{price + 0.1},{price - 0.1},{price},100,5\n")
+            with open(update_path, "w", encoding="utf-8") as f:
+                for i in range(210, 213):
+                    price = 100 + i * 0.01
+                    f.write(f"{i * 14400},{price},{price + 0.1},{price - 0.1},{price},100,5\n")
+            paths = find_pair_files(tmp, "XBTUSD")
+            self.assertEqual(len(paths), 2)
+            data, diagnostics = load_csv_directory(tmp, ["XBTUSD"])
+            self.assertEqual(len(data["XBTUSD"]), 213)
+            self.assertEqual(diagnostics["XBTUSD"]["status"], "ok")
+            self.assertEqual(diagnostics["XBTUSD"]["raw_candles"], 213)
 
     def test_rejects_unfilled_large_gaps_and_nonfinite_rows(self):
         rows = [
