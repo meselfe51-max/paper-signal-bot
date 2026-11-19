@@ -15,11 +15,19 @@ The existing Telegram bot, wallet and strategy are not connected to the competit
 
 ## Strategy Competition Lab
 
-Run the independent competition using local Kraken-format 4-hour CSV files:
+Run the independent competition using recent public Kraken candles:
+
+```bash
+python -m laboratory.run --live --out results/competition.json
+```
+
+Or use local historical Kraken-format 4-hour CSV files:
 
 ```bash
 python -m laboratory.run --csv-dir data --out results/competition.json
 ```
+
+The live mode downloads only public OHLC data (up to the exchange endpoint's recent-history limit); it never submits orders.
 
 Expected filenames include `XBTUSD_240.csv`, `ETHUSD_240.csv`, `SOLUSD_240.csv`. Columns: timestamp, open, high, low, close, volume; a header row is allowed. Missing symbols and files with fewer than 211 valid candles are skipped.
 
@@ -39,7 +47,7 @@ Each strategy/asset pair receives its own $1,000 virtual account. No contestant 
 
 Each signal is labeled using only candles already closed:
 
-- trend: bullish, bearish, sideways, unknown;
+- trend: bullish, bearish, sideways, transition, unknown;
 - volatility: high, normal, low, unknown;
 - combined labels such as `bullish_high`, `sideways_low`, `bearish_normal`.
 
