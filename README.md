@@ -29,7 +29,7 @@ python -m laboratory.run --live --out results/recent-competition.json
 
 ### Supplying historical data
 
-Kraken publishes downloadable OHLCVT CSV archives containing each pair's available history and 240-minute candles. Download and extract the archive, then point `--csv-dir` at the extracted directory. The loader searches recursively, so the original nested folder structure can be kept. It recognizes files such as `XBTUSD_240.csv`; each CSV row may contain the seven official columns:
+Kraken publishes downloadable OHLCVT CSV archives containing each pair's available history and 240-minute candles. Download and extract the archive, then point `--csv-dir` at the extracted directory. The loader searches recursively, so the original nested folder structure can be kept. It merges every matching canonical pair/timeframe CSV it finds (useful when full and incremental files are both present), then deduplicates timestamps. It recognizes files such as `XBTUSD_240.csv`; each CSV row may contain the seven official columns:
 
 `timestamp, open, high, low, close, volume, trades`
 
