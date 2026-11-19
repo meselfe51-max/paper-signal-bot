@@ -1,6 +1,5 @@
 """Performance matrices, weakness diagnostics and causal hybrid strategy selection."""
 from collections import defaultdict
-from math import inf
 
 
 def _metrics(trades):
@@ -14,7 +13,7 @@ def _metrics(trades):
     return {"trades": n, "win_rate_pct": len(wins) / n * 100,
             "net_pnl": sum(t["net"] for t in trades),
             "avg_r": sum(t["r"] for t in trades) / n,
-            "profit_factor": sum(wins) / gross_loss if gross_loss else (inf if wins else None)}
+            "profit_factor": sum(wins) / gross_loss if gross_loss else ("inf" if wins else None)}
 
 
 def build_report(results):
