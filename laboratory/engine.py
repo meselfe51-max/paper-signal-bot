@@ -1,6 +1,6 @@
 """Equal-conditions, isolated paper simulator for strategy competition."""
 from .regimes import classify_regime
-from .strategies import STRATEGIES, atr
+from bisect import bisect_right\nfrom .strategies import STRATEGIES, atr, daily_from_4h, daily_trend_up, existing_adaptive
 
 START_EQUITY = 1000.0
 RISK_FRACTION = 0.0075
@@ -92,11 +92,35 @@ def simulate_asset(candles, pair, strategy_name, signal_fn, regime_cache=None):
 def run_competition(data, strategies=None):
     selected = strategies or STRATEGIES
     results = []
+    btc_daily = daily_from_4h(data.get("XBTUSD", []))
+    btc_daily_close_times = [row["t"] + 86400 for row in btc_daily]
+    btc_trend_cache = {}
+
+    def btc_trend_at(signal_candle):
+        # The signal candle has closed at its timestamp + four hours. Only fully
+        # completed UTC daily candles are eligible, matching the live bot's filter.
+        close_time = signal_candle["t"] + 4 * 3600
+        if close_time not in btc_trend_cache:
+            end = bisect_right(btc_daily_close_times, close_time)
+            btc_trend_cache[close_time] = daily_trend_up(btc_daily[:end])
+        return btc_trend_cache[close_time]
+
+    pair_names = {"XBTUSD": "BTC/USD", "ETHUSD": "ETH/USD", "SOLUSD": "SOL/USD",
+                  "XRPUSD": "XRP/USD", "ADAUSD": "ADA/USD", "LINKUSD": "LINK/USD",
+                  "AVAXUSD": "AVAX/USD", "LTCUSD": "LTC/USD", "DOTUSD": "DOT/USD",
+                  "ATOMUSD": "ATOM/USD", "PAXGUSD": "PAXG/USD"}
     for pair, candles in sorted(data.items()):
         if len(candles) < 211:
             continue
         # Regime is a property of the market history, not of a contestant.
         regime_cache = {i: classify_regime(candles[:i]) for i in range(210, len(candles))}
         for strategy_name, signal_fn in selected.items():
-            results.append(simulate_asset(candles, pair, strategy_name, signal_fn, regime_cache))
+            if strategy_name == "existing_adaptive_baseline":
+                name = pair_names.get(pair, pair)
+                def baseline_signal(history, regime, _name=name):
+                    return existing_adaptive(history, regime, btc_trend_at(history[-1]), _name)
+                active_signal = baseline_signal
+            else:
+                active_signal = signal_fn
+            results.append(simulate_asset(candles, pair, strategy_name, active_signal, regime_cache))
     return results
