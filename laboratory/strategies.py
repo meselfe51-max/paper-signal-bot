@@ -93,11 +93,14 @@ def existing_adaptive(c, regime):
     """Run the repository's current adaptive strategy as a benchmark, unchanged."""
     if len(c) < 210: return False
     from adaptive_strategy import analyze
+    grouped = {}
+    for candle in c:
+        day = candle["t"] // 86400 * 86400
+        grouped.setdefault(day, []).append(candle)
     daily = []
-    for start in range(0, len(c) - 5, 6):
-        group = c[start:start + 6]
-        if len(group) == 6:
-            daily.append({"t": group[0]["t"], "o": group[0]["o"],
+    for day, group in sorted(grouped.items()):
+        if len(group) >= 6:
+            daily.append({"t": day, "o": group[0]["o"],
                           "h": max(x["h"] for x in group), "l": min(x["l"] for x in group),
                           "c": group[-1]["c"], "v": sum(x.get("v", 0) for x in group)})
     result = analyze(c, daily, True, "BTC/USD")
