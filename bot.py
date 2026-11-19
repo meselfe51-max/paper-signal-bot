@@ -1,7 +1,7 @@
 """Multi-coin paper-trading bot v4 - long-only spot, ONE shared wallet.
 
 Trend following: daily regime filter + 4h Donchian breakout + ATR chandelier trailing stop.
-Kraken prices, Telegram alerts. Runs from GitHub Actions (triggered every minute).
+Kraken prices, Telegram alerts. Runs from GitHub Actions (Cloudflare-triggered every 5 minutes, with an hourly fallback).
 Pure standard library - no pip install needed.
 """
 import json
@@ -10,7 +10,7 @@ import shutil
 import time
 import urllib.request
 from datetime import datetime, timezone
-from adaptive_strategy import analyze as analyze_strategy
+from adaptive_strategy import analyze as analyze_strategy, ENTRY_SCORE as STRATEGY_ENTRY_SCORE
 
 # ---------------- settings ----------------
 PAIRS = [
@@ -206,7 +206,8 @@ def new_state():
     return {"v": STATE_VERSION, "kind": STATE_KIND, "balance": START_BALANCE, "peak": START_BALANCE,
             "peak_all": START_BALANCE, "open": {},
             "history": [], "pairs": {}, "cooldown": {}, "last_daily": "", "failed": [],
-            "halted": False, "halt_until": 0, "reduced_until": 0, "outbox": [], "btc_warn": False}
+            "halted": False, "halt_until": 0, "reduced_until": 0, "outbox": [], "btc_warn": False,
+            "diagnostics": {}, "tg_commands_version": 0}
 
 
 def _read(path):
@@ -222,6 +223,8 @@ def valid_state(st):
 def fill_defaults(st):
     for k, v in new_state().items():
         st.setdefault(k, v)
+    if not isinstance(st.get("diagnostics"), dict):
+        st["diagnostics"] = {}
     if st.get("peak_all", 0) < st["peak"]:
         st["peak_all"] = st["peak"]
     return st
@@ -450,6 +453,90 @@ def status_text(res):
     return ("نیازمند تأیید عوامل دیگر" if not failed else "امتیاز ناکافی: " + "، ".join(failed[:2])) + score_txt
 
 
+
+def record_diagnostic(st, name, res, now, reason, new_candle):
+    """Record one final decision per closed candle, without changing entry rules."""
+    item = st.setdefault("diagnostics", {}).setdefault(
+        name, {"checks": 0, "strategy_pass": 0, "entries": 0,
+               "blocked": {}, "errors": {}, "last": {},
+               "last_checked_candle": 0, "last_outcome_candle": 0})
+    candle = int(res.get("candle", 0))
+    is_new_candle = bool(new_candle and candle and item.get("last_checked_candle") != candle)
+    if is_new_candle:
+        item["checks"] = int(item.get("checks", 0)) + 1
+        if res.get("ok"):
+            item["strategy_pass"] = int(item.get("strategy_pass", 0)) + 1
+        item["last_checked_candle"] = candle
+
+    if reason and candle and item.get("last_outcome_candle") != candle:
+        if reason == "ورود مجازی باز شد":
+            item["entries"] = int(item.get("entries", 0)) + 1
+        else:
+            blocked = item.setdefault("blocked", {})
+            blocked[reason] = int(blocked.get(reason, 0)) + 1
+        item["last_outcome_candle"] = candle
+
+    item["last"] = {
+        "at": int(now), "candle": candle,
+        "score": float(res.get("score", 0)), "threshold": STRATEGY_ENTRY_SCORE,
+        "regime": res.get("regime", "unknown"), "setup": res.get("setup", ""),
+        "strategy_ok": bool(res.get("ok")),
+        "failed_filters": [label for label, passed in res.get("filters", []) if not passed],
+        "strategy_reasons": list(res.get("reasons", [])),
+        "decision": reason or ("شرایط استراتژی برقرار است" if res.get("ok") else "شرایط استراتژی برقرار نیست")
+    }
+
+
+def record_diagnostic_error(st, name, now, reason, candle=0):
+    """Record data/analysis failures separately from genuine strategy rejections."""
+    item = st.setdefault("diagnostics", {}).setdefault(
+        name, {"checks": 0, "strategy_pass": 0, "entries": 0,
+               "blocked": {}, "errors": {}, "last": {},
+               "last_checked_candle": 0, "last_outcome_candle": 0})
+    reason = str(reason)[:180]
+    errors = item.setdefault("errors", {})
+    errors[reason] = int(errors.get(reason, 0)) + 1
+    item["last"] = {
+        "at": int(now), "candle": int(candle), "score": 0.0,
+        "threshold": STRATEGY_ENTRY_SCORE, "regime": "unknown",
+        "setup": "", "strategy_ok": False, "failed_filters": [],
+        "strategy_reasons": [reason], "decision": "خطای دریافت یا تحلیل داده"
+    }
+
+
+def strategy_block_reason(res):
+    details = [label for label, passed in res.get("filters", []) if not passed]
+    details += list(res.get("reasons", []))
+    details = list(dict.fromkeys(x for x in details if x))
+    return "رد شروط استراتژی: " + ("؛ ".join(details[:3]) or "امتیاز یا الگوی ورود کافی نیست")
+
+
+def diagnostics_reply(st):
+    lines = ["گزارش تشخیصی ورودها (فقط شبیه‌سازی):"]
+    for _, name in PAIRS:
+        item = st.get("diagnostics", {}).get(name)
+        if not item or not item.get("last"):
+            lines.append(f"\n{name}: هنوز تحلیلی ثبت نشده.")
+            continue
+        last = item["last"]
+        top = sorted(item.get("blocked", {}).items(), key=lambda x: -x[1])[:3]
+        errors = sorted(item.get("errors", {}).items(), key=lambda x: -x[1])[:2]
+        blocked = "؛ ".join(f"{k}: {v}" for k, v in top) or "ندارد"
+        error_text = "؛ ".join(f"{k}: {v}" for k, v in errors) or "ندارد"
+        failed = "، ".join(last.get("failed_filters", [])) or "هیچ‌کدام"
+        reasons = "، ".join(last.get("strategy_reasons", [])) or "ندارد"
+        lines.append(
+            f"\n{name} | بررسی {item.get('checks', 0)} | عبور استراتژی {item.get('strategy_pass', 0)} | ورود مجازی {item.get('entries', 0)}"
+            f"\nامتیاز {last.get('score', 0):.2f}/{last.get('threshold', STRATEGY_ENTRY_SCORE):.1f} | رژیم {last.get('regime')} | الگو {last.get('setup') or 'ندارد'}"
+            f"\nتصمیم اخیر: {last.get('decision')}"
+            f"\nفیلترهای ردشده: {failed}"
+            f"\nدلایل استراتژی/خطا: {reasons}"
+            f"\nموانع پرتکرار: {blocked}"
+            f"\nخطاهای داده (تعداد {sum(item.get('errors', {}).values())}): {error_text}"
+        )
+    return "\n".join(lines)
+
+
 # ---------------- live management of an open trade ----------------
 def manage_live(st, name, raw_m, now):
     """Returns ("exit"|"trail", text) or None."""
@@ -594,12 +681,37 @@ def plan_reply(st, now):
 
 
 # ---------------- Telegram commands ----------------
-HELP_TEXT = ("دستورها:\n"
-             "/status معاملات باز با قیمت لحظه‌ای\n"
-             "/stats وضعیت کیف پول و آمار هر ارز\n"
-             "/plan هر ارز چقدر باید بالا یا پایین برود تا ورود یا خروج شود\n"
-             "/help همین راهنما\n\n"
-             "جواب‌ها با اجرای بعدی بات می‌آیند (معمولاً ۱ تا ۲ دقیقه). همه‌ی معاملات مجازی‌اند.")
+TELEGRAM_COMMANDS = (
+    {"command": "start", "description": "شروع و نمایش راهنما"},
+    {"command": "status", "description": "معاملات باز و قیمت فعلی"},
+    {"command": "stats", "description": "وضعیت کیف پول و آمار"},
+    {"command": "plan", "description": "بررسی شرایط ورود و خروج"},
+    {"command": "diagnostics", "description": "علت رد یا عبور هر ارز از شروط ورود"},
+    {"command": "help", "description": "نمایش راهنمای دستورها"},
+)
+TELEGRAM_COMMANDS_VERSION = 1
+HELP_TEXT = ("دستورها:\n" +
+             "\n".join(f"/{item['command']} {item['description']}" for item in TELEGRAM_COMMANDS) +
+             "\n\nجواب‌ها با اجرای بعدی بات می‌آیند (معمولاً ۱ تا ۲ دقیقه). همه‌ی معاملات مجازی‌اند.")
+
+
+def sync_telegram_commands(st):
+    """Keep Telegram's slash-command menu in sync with HELP_TEXT and the command router."""
+    token = (os.environ.get("TELEGRAM_BOT_TOKEN") or "").strip()
+    if not token or st.get("tg_commands_version") == TELEGRAM_COMMANDS_VERSION:
+        return
+    try:
+        response = http_json(
+            f"https://api.telegram.org/bot{token}/setMyCommands",
+            {"commands": list(TELEGRAM_COMMANDS)}, tries=1)
+        if response.get("ok"):
+            st["tg_commands_version"] = TELEGRAM_COMMANDS_VERSION
+        else:
+            print(f"[COMMAND MENU ERROR] {response}")
+    except Exception as e:  # noqa
+        print(f"[COMMAND MENU ERROR] {e}")
+
+
 
 
 def status_reply(st, prices, now):
@@ -660,6 +772,8 @@ def poll_commands(st, prices, now):
                 out.append(plan_reply(st, now))
             except Exception as e:  # noqa
                 out.append(f"⚠️ ساخت گزارش ناموفق بود: {str(e)[:100]}")
+        elif cmd == "/diagnostics":
+            out.append(diagnostics_reply(st))
         else:
             out.append("دستور ناشناخته. /help را بفرست.")
     return out
@@ -691,6 +805,7 @@ def market_cycle(st, now, msgs, report_due, today):
                     st["failed"].remove(name)
             except Exception as e:  # noqa
                 print(f"[ERROR] {name}: {e}")
+                record_diagnostic_error(st, name, now, e)
                 if name not in st["failed"]:
                     st["failed"].append(name)
                     msgs.append(f"⚠️ مشکل در دریافت یا تحلیل {name}: {str(e)[:150]}\n"
@@ -760,6 +875,7 @@ def market_cycle(st, now, msgs, report_due, today):
             res = analyze(closed, get_daily(pair), b, name)
         except Exception as e:  # noqa
             print(f"[ERROR] analyze {name}: {e}")  # candle not marked as seen: retried next run
+            record_diagnostic_error(st, name, now, e, last.get("t", 0))
             continue
         analyses[name] = res
         if not new_candle:
@@ -769,15 +885,25 @@ def market_cycle(st, now, msgs, report_due, today):
             if missed >= 1:
                 gaps.append(f"{name}: {missed}")
         ps["last_candle"] = last["t"]
-        if name in st["open"] or name in exited or not res["ok"]:
+        if name in st["open"]:
+            record_diagnostic(st, name, res, now, "برای این ارز معامله‌ی مجازی باز وجود دارد", True)
+            continue
+        if name in exited:
+            record_diagnostic(st, name, res, now, "معامله‌ی همین ارز در این چرخه بسته شد", True)
+            continue
+        if not res["ok"]:
+            record_diagnostic(st, name, res, now, strategy_block_reason(res), True)
             continue
         if st["cooldown"].get(name, 0) > now:
+            record_diagnostic(st, name, res, now, "دوره‌ی انتظار پس از ضرر فعال است", True)
             continue
         age = now - (last["t"] + PERIOD)
         if age > MAX_SIGNAL_AGE:
+            record_diagnostic(st, name, res, now, "سیگنال دیر شناسایی شد", True)
             msgs.append(f"⚪ سیگنال خرید {name} رد شد: {age / 60:.0f} دقیقه بعد از بسته شدن کندل پیدا شد (دیر).")
             continue
         if data[name]["price"] - last["c"] > MAX_CHASE * res["atr"]:
+            record_diagnostic(st, name, res, now, "قیمت بیش از حد از نقطه‌ی سیگنال فاصله گرفته", True)
             msgs.append(f"⚪ سیگنال خرید {name} رد شد: قیمت از نقطه‌ی سیگنال ({fmt(last['c'])}) "
                         f"بیش از {MAX_CHASE:g} ATR بالاتر رفته ({fmt(data[name]['price'])}).")
             continue
@@ -794,13 +920,16 @@ def market_cycle(st, now, msgs, report_due, today):
     # 5) open new trades: strongest recent momentum first, limited by cash, count and total risk
     for _, name, res in sorted(cands, key=lambda x: -x[0]):
         if st["halted"]:
+            record_diagnostic(st, name, res, now, "توقف حفاظتی کیف پول فعال است", True)
             msgs.append(f"⚪ سیگنال خرید {name} رد شد: معامله‌ی جدید به خاطر افت کیف پول متوقف است.")
             continue
         entry = data[name]["price"] * (1 + SLIP)
         t, why = open_position(st, name, entry, res["atr"], now, res["setup"], risk_mult)
         if t is None:
+            record_diagnostic(st, name, res, now, why, True)
             msgs.append(f"⚪ سیگنال خرید {name} رد شد: {why}.")
             continue
+        record_diagnostic(st, name, res, now, "ورود مجازی باز شد", True)
         msgs.append(open_msg(st, name, t, res, risk_mult))
 
     # 6) daily report
@@ -832,6 +961,7 @@ def market_cycle(st, now, msgs, report_due, today):
 # ---------------- main ----------------
 def main():
     st, status = load_state()
+    sync_telegram_commands(st)
     now = time.time()
     msgs = []
     if status == "fresh":
@@ -855,7 +985,7 @@ def main():
     else:
         print("[IDLE] nothing to evaluate in this run")
 
-    # Telegram commands (/status, /stats, /plan, /help)
+    # Telegram commands (/start, /status, /stats, /plan, /diagnostics, /help)
     msgs += poll_commands(st, prices, now)
 
     # Save first, then send (undelivered messages stay queued in the state file)

@@ -26,3 +26,9 @@ class StrategyTests(unittest.TestCase):
         for key in ("ok","setup","filters","atr","price","level","rank","score","regime","reasons"):
             self.assertIn(key,r)
 
+    def test_clean_uptrend_can_produce_an_entry(self):
+        r = analyze(candles(260, start=100.0, step=0.12),
+                    candles(100, start=100.0, step=0.5), True, "BTC/USD")
+        self.assertTrue(r["ok"], msg=f"Expected a valid paper signal, got: {r}")
+        self.assertGreaterEqual(r["score"], 6.0)
+
