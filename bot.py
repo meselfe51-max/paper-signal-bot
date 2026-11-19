@@ -746,6 +746,13 @@ def market_cycle(st, now, msgs, report_due, today):
                     st["failed"].remove(name)
             except Exception as e:  # noqa
                 print(f"[ERROR] {name}: {e}")
+                diag = st.setdefault("diagnostics", {}).setdefault(
+                    name, {"checks": 0, "strategy_pass": 0, "entries": 0, "blocked": {}, "last": {}})
+                diag["last"] = {"at": int(now), "candle": 0, "score": 0.0,
+                                "threshold": STRATEGY_ENTRY_SCORE, "regime": "unknown",
+                                "setup": "", "strategy_ok": False, "failed_filters": [],
+                                "strategy_reasons": [str(e)[:150]],
+                                "decision": "خطای دریافت یا آماده‌سازی داده"}
                 if name not in st["failed"]:
                     st["failed"].append(name)
                     msgs.append(f"⚠️ مشکل در دریافت یا تحلیل {name}: {str(e)[:150]}\n"
