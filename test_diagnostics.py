@@ -18,7 +18,7 @@ class EntryDiagnosticsTests(unittest.TestCase):
         item = state["diagnostics"]["BTC/USD"]
         self.assertEqual(item["checks"], 1)
         self.assertEqual(item["strategy_pass"], 1)
-        self.assertEqual(item["entries"], 0)  # same candle cannot be double-counted
+        self.assertEqual(item["entries"], 1)  # final outcome counted once
         self.assertEqual(item["last"]["decision"], "ورود مجازی باز شد")
 
     def test_blocker_is_counted(self):
