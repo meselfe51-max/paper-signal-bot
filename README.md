@@ -15,21 +15,29 @@ The existing Telegram bot, wallet and strategy are not connected to the competit
 
 ## Strategy Competition Lab
 
-Run the independent competition using recent public Kraken candles:
-
-```bash
-python -m laboratory.run --live --out results/competition.json
-```
-
-Or use local historical Kraken-format 4-hour CSV files:
+Run the independent competition on **full historical CSV data**:
 
 ```bash
 python -m laboratory.run --csv-dir data --out results/competition.json
 ```
 
-The live mode downloads only public OHLC data (up to the exchange endpoint's recent-history limit); it never submits orders.
+The recent public API mode is only a short-history fallback (Kraken's OHLC endpoint is limited to the latest 720 candles):
 
-Expected filenames include `XBTUSD_240.csv`, `ETHUSD_240.csv`, `SOLUSD_240.csv`. Columns: timestamp, open, high, low, close, volume; a header row is allowed. Missing symbols and files with fewer than 211 valid candles are skipped.
+```bash
+python -m laboratory.run --live --out results/recent-competition.json
+```
+
+### Supplying historical data
+
+Kraken publishes downloadable OHLCVT CSV archives containing each pair's available history and 240-minute candles. Download and extract the archive, then point `--csv-dir` at the extracted directory. The loader searches recursively, so the original nested folder structure can be kept. It recognizes files such as `XBTUSD_240.csv`; each CSV row may contain the seven official columns:
+
+`timestamp, open, high, low, close, volume, trades`
+
+No header is required. The loader reads the first six columns and ignores the trade-count column. It validates rows, sorts timestamps, removes duplicates, and fills exact missing 4-hour intervals with flat zero-volume candles (Kraken documents that missing intervals mean no trades). Very large gaps are reported instead of being expanded. Every strategy receives the same full available history for each asset; at each decision it sees only candles strictly earlier than that decision candle.
+
+Official archive instructions and quarterly updates: [Kraken downloadable historical OHLCVT data](https://support.kraken.com/articles/360047124832-downloadable-historical-ohlcvt-open-high-low-close-volume-trades-data). The full archive is large and split into multiple parts; make sure all parts are joined before extracting. The project does not commit raw market data or store the multi-gigabyte archive in Git.
+
+The report's `data` section records the file used, first/last timestamp, raw candle count, synthetic no-trade candles, and large gaps. Do not compare strategies across runs with materially different data coverage.
 
 ### Independent contestants
 
