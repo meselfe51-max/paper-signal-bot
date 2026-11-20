@@ -7,37 +7,37 @@
  "history": [],
  "pairs": {
   "BTC/USD": {
-   "last_candle": 1795104000
+   "last_candle": 1795118400
   },
   "ETH/USD": {
-   "last_candle": 1795104000
+   "last_candle": 1795118400
   },
   "SOL/USD": {
-   "last_candle": 1795104000
+   "last_candle": 1795118400
   },
   "XRP/USD": {
-   "last_candle": 1795104000
+   "last_candle": 1795118400
   },
   "ADA/USD": {
-   "last_candle": 1795104000
+   "last_candle": 1795118400
   },
   "LINK/USD": {
-   "last_candle": 1795104000
+   "last_candle": 1795118400
   },
   "AVAX/USD": {
-   "last_candle": 1795104000
+   "last_candle": 1795118400
   },
   "LTC/USD": {
-   "last_candle": 1795104000
+   "last_candle": 1795118400
   },
   "DOT/USD": {
-   "last_candle": 1795104000
+   "last_candle": 1795118400
   },
   "ATOM/USD": {
-   "last_candle": 1795104000
+   "last_candle": 1795118400
   },
   "PAXG/USD": {
-   "last_candle": 1795104000
+   "last_candle": 1795118400
   }
  },
  "cooldown": {},
@@ -58,7 +58,7 @@
    "blocked": {},
    "errors": {},
    "last": {
-    "at": 1795118413,
+    "at": 1795132818,
     "candle": 0,
     "score": 1.75,
     "threshold": 6.0,
@@ -91,7 +91,7 @@
    "blocked": {},
    "errors": {},
    "last": {
-    "at": 1795118413,
+    "at": 1795132818,
     "candle": 0,
     "score": 1.75,
     "threshold": 6.0,
@@ -126,9 +126,9 @@
    "blocked": {},
    "errors": {},
    "last": {
-    "at": 1795118413,
+    "at": 1795132818,
     "candle": 0,
-    "score": 2.5,
+    "score": 2.75,
     "threshold": 6.0,
     "regime": "bearish",
     "setup": "",
@@ -139,7 +139,7 @@
      "قیمت بالای EMA200 چهار‌ساعته",
      "EMA20 بالای EMA50",
      "شیب EMA50 مثبت",
-     "قدرت حرکت مناسب",
+     "حجم تأییدکننده",
      "ساختار ورود"
     ],
     "strategy_reasons": [
@@ -160,9 +160,9 @@
    "blocked": {},
    "errors": {},
    "last": {
-    "at": 1795118413,
+    "at": 1795132818,
     "candle": 0,
-    "score": 1.75,
+    "score": 0.75,
     "threshold": 6.0,
     "regime": "bearish",
     "setup": "",
@@ -175,7 +175,9 @@
      "شیب EMA50 مثبت",
      "قدرت حرکت مناسب",
      "حجم تأییدکننده",
-     "ساختار ورود"
+     "حجم حداقلی",
+     "ساختار ورود",
+     "فاصله مناسب از EMA20"
     ],
     "strategy_reasons": [
      "روند روزانه نزولی است",
@@ -195,7 +197,7 @@
    "blocked": {},
    "errors": {},
    "last": {
-    "at": 1795118413,
+    "at": 1795132818,
     "candle": 0,
     "score": 1.75,
     "threshold": 6.0,
@@ -230,9 +232,9 @@
    "blocked": {},
    "errors": {},
    "last": {
-    "at": 1795118413,
+    "at": 1795132818,
     "candle": 0,
-    "score": 1.0,
+    "score": 0.75,
     "threshold": 6.0,
     "regime": "bearish",
     "setup": "",
@@ -245,6 +247,7 @@
      "شیب EMA50 مثبت",
      "قدرت حرکت مناسب",
      "حجم تأییدکننده",
+     "حجم حداقلی",
      "ساختار ورود",
      "فاصله مناسب از EMA20"
     ],
@@ -266,9 +269,9 @@
    "blocked": {},
    "errors": {},
    "last": {
-    "at": 1795118413,
+    "at": 1795132818,
     "candle": 0,
-    "score": 1.0,
+    "score": 0.75,
     "threshold": 6.0,
     "regime": "bearish",
     "setup": "",
@@ -281,6 +284,7 @@
      "شیب EMA50 مثبت",
      "قدرت حرکت مناسب",
      "حجم تأییدکننده",
+     "حجم حداقلی",
      "ساختار ورود",
      "فاصله مناسب از EMA20"
     ],
@@ -302,7 +306,7 @@
    "blocked": {},
    "errors": {},
    "last": {
-    "at": 1795118413,
+    "at": 1795132818,
     "candle": 0,
     "score": 1.75,
     "threshold": 6.0,
@@ -337,9 +341,9 @@
    "blocked": {},
    "errors": {},
    "last": {
-    "at": 1795118413,
+    "at": 1795132818,
     "candle": 0,
-    "score": 1.0,
+    "score": 1.75,
     "threshold": 6.0,
     "regime": "bearish",
     "setup": "",
@@ -351,7 +355,6 @@
      "EMA20 بالای EMA50",
      "شیب EMA50 مثبت",
      "قدرت حرکت مناسب",
-     "حجم تأییدکننده",
      "ساختار ورود",
      "فاصله مناسب از EMA20"
     ],
@@ -373,9 +376,9 @@
    "blocked": {},
    "errors": {},
    "last": {
-    "at": 1795118413,
+    "at": 1795132818,
     "candle": 0,
-    "score": 1.0,
+    "score": 1.75,
     "threshold": 6.0,
     "regime": "bearish",
     "setup": "",
@@ -387,7 +390,6 @@
      "EMA20 بالای EMA50",
      "شیب EMA50 مثبت",
      "قدرت حرکت مناسب",
-     "حجم تأییدکننده",
      "ساختار ورود",
      "فاصله مناسب از EMA20"
     ],
@@ -409,9 +411,9 @@
    "blocked": {},
    "errors": {},
    "last": {
-    "at": 1795118413,
+    "at": 1795132818,
     "candle": 0,
-    "score": 1.0,
+    "score": 1.75,
     "threshold": 6.0,
     "regime": "bearish",
     "setup": "",
@@ -422,7 +424,6 @@
      "EMA20 بالای EMA50",
      "شیب EMA50 مثبت",
      "قدرت حرکت مناسب",
-     "حجم تأییدکننده",
      "ساختار ورود",
      "فاصله مناسب از EMA20"
     ],
