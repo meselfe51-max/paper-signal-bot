@@ -7,37 +7,37 @@
  "history": [],
  "pairs": {
   "BTC/USD": {
-   "last_candle": 1795190400
+   "last_candle": 1795204800
   },
   "ETH/USD": {
-   "last_candle": 1795190400
+   "last_candle": 1795204800
   },
   "SOL/USD": {
-   "last_candle": 1795190400
+   "last_candle": 1795204800
   },
   "XRP/USD": {
-   "last_candle": 1795190400
+   "last_candle": 1795204800
   },
   "ADA/USD": {
-   "last_candle": 1795190400
+   "last_candle": 1795204800
   },
   "LINK/USD": {
-   "last_candle": 1795190400
+   "last_candle": 1795204800
   },
   "AVAX/USD": {
-   "last_candle": 1795190400
+   "last_candle": 1795204800
   },
   "LTC/USD": {
-   "last_candle": 1795190400
+   "last_candle": 1795204800
   },
   "DOT/USD": {
-   "last_candle": 1795190400
+   "last_candle": 1795204800
   },
   "ATOM/USD": {
-   "last_candle": 1795190400
+   "last_candle": 1795204800
   },
   "PAXG/USD": {
-   "last_candle": 1795190400
+   "last_candle": 1795204800
   }
  },
  "cooldown": {},
@@ -58,7 +58,7 @@
    "blocked": {},
    "errors": {},
    "last": {
-    "at": 1795204813,
+    "at": 1795219213,
     "candle": 0,
     "score": 1.75,
     "threshold": 6.0,
@@ -91,7 +91,7 @@
    "blocked": {},
    "errors": {},
    "last": {
-    "at": 1795204813,
+    "at": 1795219213,
     "candle": 0,
     "score": 1.75,
     "threshold": 6.0,
@@ -126,7 +126,7 @@
    "blocked": {},
    "errors": {},
    "last": {
-    "at": 1795204813,
+    "at": 1795219213,
     "candle": 0,
     "score": 1.75,
     "threshold": 6.0,
@@ -161,7 +161,7 @@
    "blocked": {},
    "errors": {},
    "last": {
-    "at": 1795204813,
+    "at": 1795219213,
     "candle": 0,
     "score": 1.75,
     "threshold": 6.0,
@@ -196,7 +196,7 @@
    "blocked": {},
    "errors": {},
    "last": {
-    "at": 1795204813,
+    "at": 1795219213,
     "candle": 0,
     "score": 1.75,
     "threshold": 6.0,
@@ -231,7 +231,7 @@
    "blocked": {},
    "errors": {},
    "last": {
-    "at": 1795204813,
+    "at": 1795219213,
     "candle": 0,
     "score": 1.75,
     "threshold": 6.0,
@@ -266,9 +266,9 @@
    "blocked": {},
    "errors": {},
    "last": {
-    "at": 1795204813,
+    "at": 1795219213,
     "candle": 0,
-    "score": 1.75,
+    "score": 1.0,
     "threshold": 6.0,
     "regime": "bearish",
     "setup": "",
@@ -280,6 +280,7 @@
      "EMA20 بالای EMA50",
      "شیب EMA50 مثبت",
      "قدرت حرکت مناسب",
+     "حجم تأییدکننده",
      "ساختار ورود",
      "فاصله مناسب از EMA20"
     ],
@@ -301,7 +302,7 @@
    "blocked": {},
    "errors": {},
    "last": {
-    "at": 1795204813,
+    "at": 1795219213,
     "candle": 0,
     "score": 1.75,
     "threshold": 6.0,
@@ -336,7 +337,7 @@
    "blocked": {},
    "errors": {},
    "last": {
-    "at": 1795204813,
+    "at": 1795219213,
     "candle": 0,
     "score": 1.75,
     "threshold": 6.0,
@@ -371,9 +372,9 @@
    "blocked": {},
    "errors": {},
    "last": {
-    "at": 1795204813,
+    "at": 1795219213,
     "candle": 0,
-    "score": 1.0,
+    "score": 0.75,
     "threshold": 6.0,
     "regime": "bearish",
     "setup": "",
@@ -386,6 +387,7 @@
      "شیب EMA50 مثبت",
      "قدرت حرکت مناسب",
      "حجم تأییدکننده",
+     "حجم حداقلی",
      "ساختار ورود",
      "فاصله مناسب از EMA20"
     ],
@@ -407,7 +409,7 @@
    "blocked": {},
    "errors": {},
    "last": {
-    "at": 1795204813,
+    "at": 1795219213,
     "candle": 0,
     "score": 1.75,
     "threshold": 6.0,
