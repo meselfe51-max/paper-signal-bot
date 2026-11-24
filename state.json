@@ -7,37 +7,37 @@
  "history": [],
  "pairs": {
   "BTC/USD": {
-   "last_candle": 1795449600
+   "last_candle": 1795464000
   },
   "ETH/USD": {
-   "last_candle": 1795449600
+   "last_candle": 1795464000
   },
   "SOL/USD": {
-   "last_candle": 1795449600
+   "last_candle": 1795464000
   },
   "XRP/USD": {
-   "last_candle": 1795449600
+   "last_candle": 1795464000
   },
   "ADA/USD": {
-   "last_candle": 1795449600
+   "last_candle": 1795464000
   },
   "LINK/USD": {
-   "last_candle": 1795449600
+   "last_candle": 1795464000
   },
   "AVAX/USD": {
-   "last_candle": 1795449600
+   "last_candle": 1795464000
   },
   "LTC/USD": {
-   "last_candle": 1795449600
+   "last_candle": 1795464000
   },
   "DOT/USD": {
-   "last_candle": 1795449600
+   "last_candle": 1795464000
   },
   "ATOM/USD": {
-   "last_candle": 1795449600
+   "last_candle": 1795464000
   },
   "PAXG/USD": {
-   "last_candle": 1795449600
+   "last_candle": 1795464000
   }
  },
  "cooldown": {},
@@ -58,9 +58,9 @@
    "blocked": {},
    "errors": {},
    "last": {
-    "at": 1795464012,
+    "at": 1795478412,
     "candle": 0,
-    "score": 3.5,
+    "score": 2.5,
     "threshold": 6.0,
     "regime": "bearish",
     "setup": "",
@@ -70,6 +70,8 @@
      "قیمت بالای EMA200 چهار‌ساعته",
      "EMA20 بالای EMA50",
      "شیب EMA50 مثبت",
+     "حجم تأییدکننده",
+     "حجم حداقلی",
      "ساختار ورود"
     ],
     "strategy_reasons": [
@@ -89,9 +91,9 @@
    "blocked": {},
    "errors": {},
    "last": {
-    "at": 1795464012,
+    "at": 1795478412,
     "candle": 0,
-    "score": 2.75,
+    "score": 2.5,
     "threshold": 6.0,
     "regime": "bearish",
     "setup": "",
@@ -103,6 +105,7 @@
      "EMA20 بالای EMA50",
      "شیب EMA50 مثبت",
      "حجم تأییدکننده",
+     "حجم حداقلی",
      "ساختار ورود"
     ],
     "strategy_reasons": [
@@ -123,9 +126,9 @@
    "blocked": {},
    "errors": {},
    "last": {
-    "at": 1795464012,
+    "at": 1795478412,
     "candle": 0,
-    "score": 4.0,
+    "score": 3.0,
     "threshold": 6.0,
     "regime": "bearish",
     "setup": "",
@@ -135,6 +138,8 @@
      "همراهی با روند BTC",
      "قیمت بالای EMA200 چهار‌ساعته",
      "EMA20 بالای EMA50",
+     "حجم تأییدکننده",
+     "حجم حداقلی",
      "ساختار ورود"
     ],
     "strategy_reasons": [
@@ -155,9 +160,9 @@
    "blocked": {},
    "errors": {},
    "last": {
-    "at": 1795464012,
+    "at": 1795478412,
     "candle": 0,
-    "score": 3.5,
+    "score": 2.5,
     "threshold": 6.0,
     "regime": "bearish",
     "setup": "",
@@ -168,6 +173,8 @@
      "قیمت بالای EMA200 چهار‌ساعته",
      "EMA20 بالای EMA50",
      "شیب EMA50 مثبت",
+     "حجم تأییدکننده",
+     "حجم حداقلی",
      "ساختار ورود"
     ],
     "strategy_reasons": [
@@ -188,9 +195,9 @@
    "blocked": {},
    "errors": {},
    "last": {
-    "at": 1795464012,
+    "at": 1795478412,
     "candle": 0,
-    "score": 3.5,
+    "score": 2.5,
     "threshold": 6.0,
     "regime": "bearish",
     "setup": "",
@@ -201,6 +208,8 @@
      "قیمت بالای EMA200 چهار‌ساعته",
      "EMA20 بالای EMA50",
      "شیب EMA50 مثبت",
+     "حجم تأییدکننده",
+     "حجم حداقلی",
      "ساختار ورود"
     ],
     "strategy_reasons": [
@@ -221,9 +230,9 @@
    "blocked": {},
    "errors": {},
    "last": {
-    "at": 1795464012,
+    "at": 1795478412,
     "candle": 0,
-    "score": 2.5,
+    "score": 3.0,
     "threshold": 6.0,
     "regime": "bearish",
     "setup": "",
@@ -233,8 +242,8 @@
      "همراهی با روند BTC",
      "قیمت بالای EMA200 چهار‌ساعته",
      "EMA20 بالای EMA50",
-     "شیب EMA50 مثبت",
-     "قدرت حرکت مناسب",
+     "حجم تأییدکننده",
+     "حجم حداقلی",
      "ساختار ورود"
     ],
     "strategy_reasons": [
@@ -255,9 +264,9 @@
    "blocked": {},
    "errors": {},
    "last": {
-    "at": 1795464012,
+    "at": 1795478412,
     "candle": 0,
-    "score": 2.75,
+    "score": 2.5,
     "threshold": 6.0,
     "regime": "bearish",
     "setup": "",
@@ -269,6 +278,7 @@
      "EMA20 بالای EMA50",
      "شیب EMA50 مثبت",
      "حجم تأییدکننده",
+     "حجم حداقلی",
      "ساختار ورود"
     ],
     "strategy_reasons": [
@@ -289,9 +299,9 @@
    "blocked": {},
    "errors": {},
    "last": {
-    "at": 1795464012,
+    "at": 1795478412,
     "candle": 0,
-    "score": 2.75,
+    "score": 2.5,
     "threshold": 6.0,
     "regime": "bearish",
     "setup": "",
@@ -303,6 +313,7 @@
      "EMA20 بالای EMA50",
      "شیب EMA50 مثبت",
      "حجم تأییدکننده",
+     "حجم حداقلی",
      "ساختار ورود"
     ],
     "strategy_reasons": [
@@ -323,9 +334,9 @@
    "blocked": {},
    "errors": {},
    "last": {
-    "at": 1795464012,
+    "at": 1795478412,
     "candle": 0,
-    "score": 3.5,
+    "score": 2.5,
     "threshold": 6.0,
     "regime": "bearish",
     "setup": "",
@@ -336,6 +347,8 @@
      "قیمت بالای EMA200 چهار‌ساعته",
      "EMA20 بالای EMA50",
      "شیب EMA50 مثبت",
+     "حجم تأییدکننده",
+     "حجم حداقلی",
      "ساختار ورود"
     ],
     "strategy_reasons": [
@@ -356,12 +369,12 @@
    "blocked": {},
    "errors": {},
    "last": {
-    "at": 1795464012,
+    "at": 1795478412,
     "candle": 0,
-    "score": 2.5,
+    "score": 2.6,
     "threshold": 6.0,
     "regime": "bearish",
-    "setup": "",
+    "setup": "شکست سقف کوتاه‌مدت",
     "strategy_ok": false,
     "failed_filters": [
      "رژیم روزانه صعودی",
@@ -370,12 +383,12 @@
      "EMA20 بالای EMA50",
      "شیب EMA50 مثبت",
      "قدرت حرکت مناسب",
-     "ساختار ورود"
+     "حجم تأییدکننده",
+     "فاصله مناسب از EMA20"
     ],
     "strategy_reasons": [
      "روند روزانه نزولی است",
      "روند روزانه BTC ضعیف است",
-     "الگوی ورود معتبر شکل نگرفته",
      "امتیاز کیفیت کمتر از حد لازم"
     ],
     "decision": "رد شروط استراتژی: رژیم روزانه صعودی؛ همراهی با روند BTC؛ قیمت بالای EMA200 چهار‌ساعته"
@@ -390,7 +403,7 @@
    "blocked": {},
    "errors": {},
    "last": {
-    "at": 1795464012,
+    "at": 1795478412,
     "candle": 0,
     "score": 2.5,
     "threshold": 6.0,
@@ -402,7 +415,8 @@
      "قیمت بالای EMA200 چهار‌ساعته",
      "EMA20 بالای EMA50",
      "شیب EMA50 مثبت",
-     "قدرت حرکت مناسب",
+     "حجم تأییدکننده",
+     "حجم حداقلی",
      "ساختار ورود"
     ],
     "strategy_reasons": [
