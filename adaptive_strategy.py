@@ -116,7 +116,8 @@ def analyze(c, d, btc_up, name=""):
         if detail:
             result["reasons"].append(detail)
 
-    # Higher-timeframe regime is weighted, not used as a single brittle gate.
+    # Higher-timeframe regime is weighted context. Bearish daily trend lowers the score,
+    # but a strong, independently confirmed 4h setup may still qualify.
     add("رژیم روزانه صعودی", 2.0, daily_state == "bullish",
         "روند روزانه نزولی است" if daily_state == "bearish" else "")
     if daily_state == "neutral":
@@ -176,7 +177,6 @@ def analyze(c, d, btc_up, name=""):
     result["filters"] = factors
     result["setup"] = setup
     result["ok"] = bool(setup and score >= ENTRY_SCORE
-                        and daily_state != "bearish"
                         and atr_pct <= ATR_PCT_HARD_MAX
                         and stretch <= MAX_STRETCH_ATR
                         and (btc_up is not None or name in ("PAXG/USD", "BTC/USD")))
