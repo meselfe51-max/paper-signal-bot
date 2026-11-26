@@ -7,37 +7,37 @@
  "history": [],
  "pairs": {
   "BTC/USD": {
-   "last_candle": 1795636800
+   "last_candle": 1795651200
   },
   "ETH/USD": {
-   "last_candle": 1795636800
+   "last_candle": 1795651200
   },
   "SOL/USD": {
-   "last_candle": 1795636800
+   "last_candle": 1795651200
   },
   "XRP/USD": {
-   "last_candle": 1795636800
+   "last_candle": 1795651200
   },
   "ADA/USD": {
-   "last_candle": 1795636800
+   "last_candle": 1795651200
   },
   "LINK/USD": {
-   "last_candle": 1795636800
+   "last_candle": 1795651200
   },
   "AVAX/USD": {
-   "last_candle": 1795636800
+   "last_candle": 1795651200
   },
   "LTC/USD": {
-   "last_candle": 1795636800
+   "last_candle": 1795651200
   },
   "DOT/USD": {
-   "last_candle": 1795636800
+   "last_candle": 1795651200
   },
   "ATOM/USD": {
-   "last_candle": 1795636800
+   "last_candle": 1795651200
   },
   "PAXG/USD": {
-   "last_candle": 1795636800
+   "last_candle": 1795651200
   }
  },
  "cooldown": {},
@@ -58,9 +58,9 @@
    "blocked": {},
    "errors": {},
    "last": {
-    "at": 1795651217,
+    "at": 1795665611,
     "candle": 0,
-    "score": 2.5,
+    "score": 1.75,
     "threshold": 6.0,
     "regime": "bearish",
     "setup": "",
@@ -71,6 +71,7 @@
      "EMA20 بالای EMA50",
      "شیب EMA50 مثبت",
      "قدرت حرکت مناسب",
+     "حجم تأییدکننده",
      "ساختار ورود"
     ],
     "strategy_reasons": [
@@ -90,7 +91,7 @@
    "blocked": {},
    "errors": {},
    "last": {
-    "at": 1795651217,
+    "at": 1795665611,
     "candle": 0,
     "score": 1.5,
     "threshold": 6.0,
@@ -126,7 +127,7 @@
    "blocked": {},
    "errors": {},
    "last": {
-    "at": 1795651217,
+    "at": 1795665611,
     "candle": 0,
     "score": 1.5,
     "threshold": 6.0,
@@ -162,9 +163,9 @@
    "blocked": {},
    "errors": {},
    "last": {
-    "at": 1795651217,
+    "at": 1795665611,
     "candle": 0,
-    "score": 1.75,
+    "score": 2.5,
     "threshold": 6.0,
     "regime": "bearish",
     "setup": "",
@@ -175,8 +176,8 @@
      "قیمت بالای EMA200 چهار‌ساعته",
      "EMA20 بالای EMA50",
      "شیب EMA50 مثبت",
-     "قدرت حرکت مناسب",
      "حجم تأییدکننده",
+     "حجم حداقلی",
      "ساختار ورود"
     ],
     "strategy_reasons": [
@@ -197,7 +198,7 @@
    "blocked": {},
    "errors": {},
    "last": {
-    "at": 1795651217,
+    "at": 1795665611,
     "candle": 0,
     "score": 1.75,
     "threshold": 6.0,
@@ -232,9 +233,9 @@
    "blocked": {},
    "errors": {},
    "last": {
-    "at": 1795651217,
+    "at": 1795665611,
     "candle": 0,
-    "score": 1.75,
+    "score": 3.5,
     "threshold": 6.0,
     "regime": "bearish",
     "setup": "",
@@ -245,8 +246,6 @@
      "قیمت بالای EMA200 چهار‌ساعته",
      "EMA20 بالای EMA50",
      "شیب EMA50 مثبت",
-     "قدرت حرکت مناسب",
-     "حجم تأییدکننده",
      "ساختار ورود"
     ],
     "strategy_reasons": [
@@ -267,43 +266,7 @@
    "blocked": {},
    "errors": {},
    "last": {
-    "at": 1795651217,
-    "candle": 0,
-    "score": 1.5,
-    "threshold": 6.0,
-    "regime": "bearish",
-    "setup": "",
-    "strategy_ok": false,
-    "failed_filters": [
-     "رژیم روزانه صعودی",
-     "همراهی با روند BTC",
-     "قیمت بالای EMA200 چهار‌ساعته",
-     "EMA20 بالای EMA50",
-     "شیب EMA50 مثبت",
-     "قدرت حرکت مناسب",
-     "حجم تأییدکننده",
-     "حجم حداقلی",
-     "ساختار ورود"
-    ],
-    "strategy_reasons": [
-     "روند روزانه نزولی است",
-     "روند روزانه BTC ضعیف است",
-     "الگوی ورود معتبر شکل نگرفته",
-     "امتیاز کیفیت کمتر از حد لازم"
-    ],
-    "decision": "رد شروط استراتژی: رژیم روزانه صعودی؛ همراهی با روند BTC؛ قیمت بالای EMA200 چهار‌ساعته"
-   },
-   "last_checked_candle": 0,
-   "last_outcome_candle": 0
-  },
-  "LTC/USD": {
-   "checks": 0,
-   "strategy_pass": 0,
-   "entries": 0,
-   "blocked": {},
-   "errors": {},
-   "last": {
-    "at": 1795651217,
+    "at": 1795665611,
     "candle": 0,
     "score": 1.75,
     "threshold": 6.0,
@@ -331,6 +294,38 @@
    "last_checked_candle": 0,
    "last_outcome_candle": 0
   },
+  "LTC/USD": {
+   "checks": 0,
+   "strategy_pass": 0,
+   "entries": 0,
+   "blocked": {},
+   "errors": {},
+   "last": {
+    "at": 1795665611,
+    "candle": 0,
+    "score": 4.35,
+    "threshold": 6.0,
+    "regime": "bearish",
+    "setup": "شکست سقف کوتاه‌مدت",
+    "strategy_ok": false,
+    "failed_filters": [
+     "رژیم روزانه صعودی",
+     "همراهی با روند BTC",
+     "قیمت بالای EMA200 چهار‌ساعته",
+     "EMA20 بالای EMA50",
+     "شیب EMA50 مثبت",
+     "فاصله مناسب از EMA20"
+    ],
+    "strategy_reasons": [
+     "روند روزانه نزولی است",
+     "روند روزانه BTC ضعیف است",
+     "امتیاز کیفیت کمتر از حد لازم"
+    ],
+    "decision": "رد شروط استراتژی: رژیم روزانه صعودی؛ همراهی با روند BTC؛ قیمت بالای EMA200 چهار‌ساعته"
+   },
+   "last_checked_candle": 0,
+   "last_outcome_candle": 0
+  },
   "DOT/USD": {
    "checks": 0,
    "strategy_pass": 0,
@@ -338,7 +333,7 @@
    "blocked": {},
    "errors": {},
    "last": {
-    "at": 1795651217,
+    "at": 1795665611,
     "candle": 0,
     "score": 2.5,
     "threshold": 6.0,
@@ -372,9 +367,9 @@
    "blocked": {},
    "errors": {},
    "last": {
-    "at": 1795651217,
+    "at": 1795665611,
     "candle": 0,
-    "score": 1.75,
+    "score": 1.5,
     "threshold": 6.0,
     "regime": "bearish",
     "setup": "",
@@ -387,6 +382,7 @@
      "شیب EMA50 مثبت",
      "قدرت حرکت مناسب",
      "حجم تأییدکننده",
+     "حجم حداقلی",
      "ساختار ورود"
     ],
     "strategy_reasons": [
@@ -407,9 +403,9 @@
    "blocked": {},
    "errors": {},
    "last": {
-    "at": 1795651217,
+    "at": 1795665611,
     "candle": 0,
-    "score": 1.5,
+    "score": 2.5,
     "threshold": 6.0,
     "regime": "bearish",
     "setup": "",
@@ -420,8 +416,6 @@
      "EMA20 بالای EMA50",
      "شیب EMA50 مثبت",
      "قدرت حرکت مناسب",
-     "حجم تأییدکننده",
-     "حجم حداقلی",
      "ساختار ورود"
     ],
     "strategy_reasons": [
